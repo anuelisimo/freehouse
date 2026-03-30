@@ -3,106 +3,145 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveRule } from '@/lib/balance'
 import { z } from 'zod'
 
-const UpdateSchema = z.object({
-  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  amount:          z.number().positive().optional(),
-  currency:        z.enum(['ARS', 'USD', 'EUR']).optional(),
-  exchange_rate:   z.number().positive().optional(),
-  type:            z.enum(['ingreso', 'gasto']).optional(),
-  business_id:     z.string().uuid().optional(),
-  category_id:     z.string().uuid().optional(),
-  paid_by:         z.enum(['mau', 'juani']).optional(),
+const MovementSchema = z.object({
+  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amount:          z.number().positive(),
+  currency:        z.enum(['ARS', 'USD', 'EUR']).default('ARS'),
+  exchange_rate:   z.number().positive().default(1),
+  type:            z.enum(['ingreso', 'gasto']),
+  business_id:     z.string().uuid(),
+  category_id:     z.string().uuid(),
+  paid_by:         z.enum(['mau', 'juani']),
   description:     z.string().max(500).optional().nullable(),
-  affects_balance: z.boolean().optional(),
-  split_override:  z.boolean().optional(),
+  affects_balance: z.boolean().default(true),
+  split_override:  z.boolean().default(false),
   pct_mau:         z.number().min(0).max(100).optional(),
   pct_juani:       z.number().min(0).max(100).optional(),
+  template_id:     z.string().uuid().optional().nullable(),
 })
 
-type Params = { params: { id: string } }
-
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { data, error } = await supabase
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const period         = searchParams.get('period')
+  const businessId     = searchParams.get('business_id')
+  const categoryId     = searchParams.get('category_id')
+  const type           = searchParams.get('type')
+  const paidBy         = searchParams.get('paid_by')
+  const currency       = searchParams.get('currency')
+  const search         = searchParams.get('search')
+  const affectsBalance = searchParams.get('affects_balance')
+  const page           = Math.max(1, parseInt(searchParams.get('page') || '1'))
+  const limit          = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50')))
+  const offset         = (page - 1) * limit
+
+  let query = supabase
     .from('movements')
-    .select('*, businesses(id,name,color), categories(id,name), profiles(id,name)')
-    .eq('id', params.id)
-    .single()
+    .select('*, businesses(id,name,color), categories(id,name), profiles(id,name)', { count: 'exact' })
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
-  if (error) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-  return NextResponse.json({ data })
+  if (period) {
+    const [year, month] = period.split('-').map(Number)
+    if (!isNaN(year) && !isNaN(month)) {
+      const startDate = new Date(year, month - 1, 1).toISOString().slice(0, 10)
+      const endDate   = new Date(year, month, 0).toISOString().slice(0, 10)
+      query = query.gte('date', startDate).lte('date', endDate)
+    }
+  }
+
+  if (businessId)     query = query.eq('business_id', businessId)
+  if (categoryId)     query = query.eq('category_id', categoryId)
+  if (type)           query = query.eq('type', type)
+  if (paidBy)         query = query.eq('paid_by', paidBy)
+  if (currency)       query = query.eq('currency', currency)
+  if (affectsBalance !== null && affectsBalance !== '')
+                      query = query.eq('affects_balance', affectsBalance === 'true')
+  if (search)         query = query.ilike('description', `%${search}%`)
+
+  const { data, error, count } = await query
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    data,
+    meta: { total: count ?? 0, page, limit, pages: Math.ceil((count ?? 0) / limit) },
+  })
 }
 
-export async function PATCH(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
 
   let body: unknown
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
 
-  const parsed = UpdateSchema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
-
-  const updates = parsed.data
-
-  const { data: current, error: fetchError } = await supabase
-    .from('movements').select('*').eq('id', params.id).single()
-  if (fetchError || !current) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-
-  const c = current as any
-
-  const willBeOverride = updates.split_override ?? c.split_override
-  if (!willBeOverride && (updates.business_id || updates.category_id)) {
-    const { data: rules } = await supabase.from('split_rules').select('*')
-    const resolved = resolveRule(
-      updates.business_id ?? c.business_id,
-      updates.category_id ?? c.category_id,
-      rules ?? []
-    )
-    updates.pct_mau   = resolved.pct_mau
-    updates.pct_juani = resolved.pct_juani
+  const parsed = MovementSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
 
-  if (updates.pct_mau !== undefined && updates.pct_juani !== undefined) {
-    if (Math.abs(updates.pct_mau + updates.pct_juani - 100) > 0.01)
-      return NextResponse.json({ error: 'pct_mau + pct_juani debe sumar 100' }, { status: 422 })
+  const payload = parsed.data
+  let pct_mau: number
+  let pct_juani: number
+
+  if (!payload.split_override) {
+    const { data: rules } = await supabase.from('split_rules').select('*')
+    const resolved = resolveRule(payload.business_id, payload.category_id, rules ?? [])
+    pct_mau   = resolved.pct_mau
+    pct_juani = resolved.pct_juani
+  } else {
+    pct_mau   = payload.pct_mau   ?? 50
+    pct_juani = payload.pct_juani ?? 50
   }
 
   const { data, error } = await supabase
-    .from('movements').update(updates).eq('id', params.id)
+    .from('movements')
+    .insert({
+      date:            payload.date,
+      amount:          payload.amount,
+      currency:        payload.currency,
+      exchange_rate:   payload.exchange_rate,
+      type:            payload.type,
+      business_id:     payload.business_id,
+      category_id:     payload.category_id,
+      template_id:     payload.template_id ?? null,
+      paid_by:         payload.paid_by,
+      created_by:      user.id,
+      description:     payload.description ?? null,
+      affects_balance: payload.affects_balance,
+      split_override:  payload.split_override,
+      pct_mau,
+      pct_juani,
+    })
     .select('*, businesses(id,name,color), categories(id,name), profiles(id,name)')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  await supabase.from('audit_log').insert({
-    table_name: 'movements', record_id: params.id, action: 'UPDATE',
-    old_data: c, new_data: data as any, user_id: user.id,
-  })
-
-  return NextResponse.json({ data })
-}
-
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-  const { data: current } = await supabase.from('movements').select('*').eq('id', params.id).single()
-  const { error } = await supabase.from('movements').delete().eq('id', params.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  if (current) {
-    await supabase.from('audit_log').insert({
-      table_name: 'movements', record_id: params.id, action: 'DELETE',
-      old_data: current as any, user_id: user.id,
-    })
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ data: null })
+  await supabase.from('audit_log').insert({
+    table_name: 'movements',
+    record_id:  (data as any).id,
+    action:     'INSERT',
+    new_data:   data as any,
+    user_id:    user.id,
+  })
+
+  return NextResponse.json({ data }, { status: 201 })
 }
