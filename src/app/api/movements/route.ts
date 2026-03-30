@@ -4,29 +4,47 @@ import { resolveRule } from '@/lib/balance'
 import { z } from 'zod'
 
 const MovementSchema = z.object({
-  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  amount:          z.number().positive(),
+  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+  amount:          z.number().positive('El monto debe ser positivo'),
   currency:        z.enum(['ARS', 'USD', 'EUR']).default('ARS'),
   exchange_rate:   z.number().positive().default(1),
-  type:            z.enum(['ingreso', 'gasto']),
+  type:            z.enum(['ingreso', 'gasto', 'liquidacion']),
   business_id:     z.string().uuid(),
   category_id:     z.string().uuid(),
   paid_by:         z.enum(['mau', 'juani']),
   description:     z.string().max(500).optional().nullable(),
   affects_balance: z.boolean().default(true),
   split_override:  z.boolean().default(false),
+  // Solo requeridos si split_override = true
   pct_mau:         z.number().min(0).max(100).optional(),
   pct_juani:       z.number().min(0).max(100).optional(),
   template_id:     z.string().uuid().optional().nullable(),
-})
+}).refine(
+  data => {
+    // Si split_override = true, los porcentajes son obligatorios
+    if (data.split_override) {
+      return data.pct_mau !== undefined && data.pct_juani !== undefined
+    }
+    return true
+  },
+  { message: 'pct_mau y pct_juani son requeridos cuando split_override es true' }
+).refine(
+  data => {
+    // Si se pasaron ambos porcentajes, deben sumar 100
+    if (data.pct_mau !== undefined && data.pct_juani !== undefined) {
+      return Math.abs(data.pct_mau + data.pct_juani - 100) < 0.01
+    }
+    return true
+  },
+  { message: 'pct_mau + pct_juani debe sumar 100' }
+)
 
+// GET /api/movements
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
   const period         = searchParams.get('period')
@@ -43,7 +61,10 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('movements')
-    .select('*, businesses(id,name,color), categories(id,name), profiles(id,name)', { count: 'exact' })
+    .select(
+      `*, businesses(id,name,color), categories(id,name), profiles(id,name)`,
+      { count: 'exact' }
+    )
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -69,26 +90,34 @@ export async function GET(request: NextRequest) {
   const { data, error, count } = await query
 
   if (error) {
+    console.error('[GET /api/movements]', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({
     data,
-    meta: { total: count ?? 0, page, limit, pages: Math.ceil((count ?? 0) / limit) },
+    meta: {
+      total: count ?? 0,
+      page,
+      limit,
+      pages: Math.ceil((count ?? 0) / limit),
+    },
   })
 }
 
+// POST /api/movements
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   let body: unknown
-  try { body = await request.json() }
-  catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Body JSON inválido' }, { status: 400 })
+  }
 
   const parsed = MovementSchema.safeParse(body)
   if (!parsed.success) {
@@ -96,19 +125,36 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = parsed.data
+
+  // ── Resolver porcentajes de reparto ────────────────────────
+  // FIX: Separar claramente los dos casos:
+  //   split_override = false → calcular automáticamente desde split_rules
+  //   split_override = true  → usar los porcentajes que vienen en el payload
   let pct_mau: number
   let pct_juani: number
 
   if (!payload.split_override) {
-    const { data: rules } = await supabase.from('split_rules').select('*')
+    // Resolución automática desde las reglas configuradas
+    const { data: rules, error: rulesError } = await supabase
+      .from('split_rules')
+      .select('*')
+
+    if (rulesError) {
+      console.error('[POST /api/movements] Error cargando reglas:', rulesError.message)
+      return NextResponse.json({ error: 'Error al cargar reglas de reparto' }, { status: 500 })
+    }
+
     const resolved = resolveRule(payload.business_id, payload.category_id, rules ?? [])
     pct_mau   = resolved.pct_mau
     pct_juani = resolved.pct_juani
   } else {
-    pct_mau   = payload.pct_mau   ?? 50
-    pct_juani = payload.pct_juani ?? 50
+    // El usuario definió manualmente los porcentajes
+    // La validación Zod ya garantizó que ambos existen y suman 100
+    pct_mau   = payload.pct_mau!
+    pct_juani = payload.pct_juani!
   }
 
+  // Escribir la auditoría y el movimiento en una sola operación
   const { data, error } = await supabase
     .from('movements')
     .insert({
@@ -132,14 +178,16 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
+    console.error('[POST /api/movements]', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Escribir auditoría
   await supabase.from('audit_log').insert({
     table_name: 'movements',
-    record_id:  (data as any).id,
+    record_id:  data.id,
     action:     'INSERT',
-    new_data:   data as any,
+    new_data:   data as unknown as Record<string, unknown>,
     user_id:    user.id,
   })
 

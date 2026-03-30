@@ -27,6 +27,17 @@ export function calculateBalance(movements: Movement[]): PeriodBalance {
   for (const m of billable) {
     const amtARS = Number(m.amount_ars)
 
+    // Liquidación: reduce la deuda directamente, no afecta ingresos/gastos
+    // El que paga (paid_by) reduce su deuda → se registra como "pagó" positivo
+    // El reparto siempre es 0%/100% o 100%/0% según quién recibe
+    if (m.type === 'liquidacion') {
+      if (m.paid_by === 'mau') mauPaid   += amtARS
+      else                     juaniPaid += amtARS
+      mauShould   += amtARS * (Number(m.pct_mau)   / 100)
+      juaniShould += amtARS * (Number(m.pct_juani) / 100)
+      continue
+    }
+
     // Signo financiero: gastos son positivos (salida de caja), ingresos negativos (entrada)
     const signed = m.type === 'gasto' ? amtARS : -amtARS
 

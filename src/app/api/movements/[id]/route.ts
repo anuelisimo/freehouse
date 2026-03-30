@@ -8,7 +8,7 @@ const UpdateSchema = z.object({
   amount:          z.number().positive().optional(),
   currency:        z.enum(['ARS', 'USD', 'EUR']).optional(),
   exchange_rate:   z.number().positive().optional(),
-  type:            z.enum(['ingreso', 'gasto']).optional(),
+  type:            z.enum(['ingreso', 'gasto', 'liquidacion']).optional(),
   business_id:     z.string().uuid().optional(),
   category_id:     z.string().uuid().optional(),
   paid_by:         z.enum(['mau', 'juani']).optional(),
@@ -54,14 +54,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .from('movements').select('*').eq('id', params.id).single()
   if (fetchError || !current) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
-  const c = current as any
-
-  const willBeOverride = updates.split_override ?? c.split_override
+  // Recalcular porcentajes si cambia negocio/categoría y no hay override manual
+  const willBeOverride = updates.split_override ?? current.split_override
   if (!willBeOverride && (updates.business_id || updates.category_id)) {
     const { data: rules } = await supabase.from('split_rules').select('*')
     const resolved = resolveRule(
-      updates.business_id ?? c.business_id,
-      updates.category_id ?? c.category_id,
+      updates.business_id ?? current.business_id,
+      updates.category_id ?? current.category_id,
       rules ?? []
     )
     updates.pct_mau   = resolved.pct_mau
@@ -82,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   await supabase.from('audit_log').insert({
     table_name: 'movements', record_id: params.id, action: 'UPDATE',
-    old_data: c, new_data: data as any, user_id: user.id,
+    old_data: current as any, new_data: data as any, user_id: user.id,
   })
 
   return NextResponse.json({ data })

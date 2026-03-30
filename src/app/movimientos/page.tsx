@@ -297,6 +297,7 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
   onEdit: () => void; onDelete: () => void; deleting: boolean
 }) {
   const isIncome = m.type === 'ingreso'
+  const isLiquid = m.type === 'liquidacion'
   const biz = (m.businesses as any)
   const cat = (m.categories as any)
 
@@ -305,10 +306,10 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
       style={{ borderBottom: last ? 'none' : '1px solid var(--border)' }}>
       <div className="w-7 h-7 rounded-sm flex items-center justify-center flex-shrink-0 text-sm font-mono"
         style={{
-          background: isIncome ? 'rgba(0,255,136,0.08)' : 'rgba(255,51,85,0.08)',
-          color:      isIncome ? 'var(--accent)' : 'var(--danger)',
+          background: isLiquid ? 'rgba(0,229,255,0.08)' : isIncome ? 'rgba(0,255,136,0.08)' : 'rgba(255,51,85,0.08)',
+          color:      isLiquid ? 'var(--cyan)' : isIncome ? 'var(--accent)' : 'var(--danger)',
         }}>
-        {isIncome ? '▼' : '▲'}
+        {isLiquid ? '⇄' : isIncome ? '▼' : '▲'}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
@@ -325,8 +326,9 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
         </div>
       </div>
       <div className="text-right flex-shrink-0 mr-1">
-        <div className={`num text-sm font-semibold ${isIncome ? 'num-pos' : 'num-neg'}`}>
-          {isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
+        <div className={`num text-sm font-semibold ${isLiquid ? '' : isIncome ? 'num-pos' : 'num-neg'}`}
+          style={isLiquid ? { color: 'var(--cyan)' } : {}}>
+          {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
         </div>
         {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>

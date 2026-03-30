@@ -7,7 +7,7 @@ import { resolveRule } from '@/lib/balance'
 import { todayISO, fmtARS } from '@/lib/fmt'
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; editId?: string | null; prefillTemplateId?: string | null }
-type MovType = 'gasto' | 'ingreso'
+type MovType = 'gasto' | 'ingreso' | 'liquidacion'
 type Partner = 'mau' | 'juani'
 
 interface F {
@@ -86,7 +86,18 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     setTimeout(() => amtRef.current?.focus(), 50)
   }
 
-  function set<K extends keyof F>(k: K, v: F[K]) { setF(f => ({ ...f, [k]: v })); setError('') }
+  function set<K extends keyof F>(k: K, v: F[K]) {
+    setF(f => {
+      const next = { ...f, [k]: v }
+      // Si es liquidación y cambia paid_by, actualizar split automáticamente
+      if (k === 'paid_by' && f.type === 'liquidacion') {
+        next.pct_mau   = v === 'mau' ? 0 : 100
+        next.pct_juani = v === 'mau' ? 100 : 0
+      }
+      return next
+    })
+    setError('')
+  }
 
   const amount   = parseFloat(form.amount) || 0
   const rate     = form.currency === 'USD' ? (exchangeRates['USD'] ?? 1) : 1
@@ -151,26 +162,55 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
               <button onClick={onClose} className="btn-icon w-7 h-7 text-sm rounded-sm">✕</button>
             </div>
 
-            {/* ── BUY / SELL toggle ─── */}
-            <div className="grid grid-cols-2 gap-1.5 mb-4 p-1 rounded-sm"
+            {/* ── Type toggle: GASTO / INGRESO / LIQUIDACIÓN ─── */}
+            <div className="grid grid-cols-3 gap-1.5 mb-4 p-1 rounded-sm"
               style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
-              {(['gasto', 'ingreso'] as MovType[]).map(t => {
+              {([
+                { t: 'gasto',      label: '▲ GASTO',  bg: 'rgba(255,51,85,0.12)',   color: 'var(--danger)', border: 'rgba(255,51,85,0.3)',   glow: 'var(--glow-r)' },
+                { t: 'ingreso',    label: '▼ INGRESO', bg: 'rgba(0,255,136,0.1)',    color: 'var(--accent)', border: 'rgba(0,255,136,0.25)',  glow: 'var(--glow-g)' },
+                { t: 'liquidacion',label: '⇄ LIQUID.', bg: 'rgba(0,229,255,0.1)',    color: 'var(--cyan)',   border: 'rgba(0,229,255,0.25)',  glow: 'var(--glow-c)' },
+              ] as { t: MovType; label: string; bg: string; color: string; border: string; glow: string }[]).map(({ t, label, bg, color, border, glow }) => {
                 const active = form.type === t
-                const isSell = t === 'gasto'
                 return (
-                  <button key={t} onClick={() => set('type', t)}
+                  <button key={t} onClick={() => {
+                    set('type', t)
+                    // Liquidación: split automático 0/100 según quién paga
+                    if (t === 'liquidacion') {
+                      setF(f => ({ ...f, type: t, split_override: true,
+                        pct_mau: f.paid_by === 'mau' ? 0 : 100,
+                        pct_juani: f.paid_by === 'mau' ? 100 : 0,
+                        affects_balance: true }))
+                    }
+                  }}
                     className="py-2.5 rounded-sm text-xs font-mono font-bold uppercase tracking-wider transition-all"
                     style={{
-                      background: active ? (isSell ? 'rgba(255,51,85,0.12)' : 'rgba(0,255,136,0.1)') : 'transparent',
-                      color:      active ? (isSell ? 'var(--danger)' : 'var(--accent)') : 'var(--text3)',
-                      border:     active ? `1px solid ${isSell ? 'rgba(255,51,85,0.3)' : 'rgba(0,255,136,0.25)'}` : '1px solid transparent',
-                      boxShadow:  active ? (isSell ? 'var(--glow-r)' : 'var(--glow-g)') : 'none',
+                      background: active ? bg : 'transparent',
+                      color:      active ? color : 'var(--text3)',
+                      border:     active ? `1px solid ${border}` : '1px solid transparent',
+                      boxShadow:  active ? glow : 'none',
                     }}>
-                    {isSell ? '▲ GASTO' : '▼ INGRESO'}
+                    {label}
                   </button>
                 )
               })}
             </div>
+
+            {/* Info liquidación */}
+            {form.type === 'liquidacion' && (
+              <div className="mb-4 p-3 rounded-sm" style={{ background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)' }}>
+                <div className="text-xs font-mono" style={{ color: 'var(--cyan)' }}>
+                  ⇄ LIQUIDACIÓN DE DEUDA
+                </div>
+                <div className="lbl mt-1" style={{ color: 'var(--text2)' }}>
+                  Registra un pago entre socios para saldar deuda. No afecta ingresos ni gastos del negocio.
+                </div>
+                <div className="lbl mt-1.5" style={{ color: 'var(--text3)' }}>
+                  {form.paid_by === 'mau'
+                    ? '→ MAU le paga a JUANI'
+                    : '→ JUANI le paga a MAU'}
+                </div>
+              </div>
+            )}
 
             {/* ── Template / concept search ─── */}
             <div className="mb-4 relative">
