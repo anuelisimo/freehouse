@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState, useCallback } from 'react'
 import type { PeriodBalance, BusinessBalance, Movement } from '@/types'
 import { fmtARS, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
@@ -37,31 +36,24 @@ export default function DashboardPage() {
 
   useEffect(() => { load(period) }, [period, load])
 
-  // Realtime: recargar cuando otro usuario carga un movimiento
+  // Refresco al volver al foco
   useEffect(() => {
-    const supabase = createClient()
-    const channel = supabase
-      .channel('movements-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'movements' }, () => {
-        load(period)
-      })
-      .subscribe()
-
-    // Refresco al volver al foco
     function handleFocus() { load(period) }
     window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [period, load])
 
-    return () => {
-      supabase.removeChannel(channel)
-      window.removeEventListener('focus', handleFocus)
-    }
+  // Poll cada 30 segundos para sincronizar con el otro usuario
+  useEffect(() => {
+    const interval = setInterval(() => { load(period) }, 30000)
+    return () => clearInterval(interval)
   }, [period, load])
 
   const bal      = data?.globalBalance
   const debtor   = bal?.debtor
   const creditor = bal?.creditor
   const debt     = bal?.debtAmount ?? 0
-  const isGreen  = !debtor || debtor === 'juani' // juani le debe a mau = mau gana
+  const isGreen  = !debtor || debtor === 'juani'
 
   return (
     <div className="h-full overflow-y-auto scrollbar-hide">
@@ -89,12 +81,8 @@ export default function DashboardPage() {
         {/* ── BALANCE HERO ──────────────────────────────── */}
         <div className={`card ticker-strip relative overflow-hidden ${!loading && isGreen ? 'card-glow-g' : !loading && !isGreen && debtor ? 'card-glow-r' : ''}`}
           style={{ paddingTop: 2 }}>
-
-          {/* Grid texture inside card */}
           <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none rounded-lg" />
-
           <div className="relative p-4">
-            {/* Header row */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full"
@@ -108,10 +96,7 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div className="space-y-2">
-                <Skel w="w-48" h="h-10" />
-                <Skel w="w-32" h="h-3" />
-              </div>
+              <div className="space-y-2"><Skel w="w-48" h="h-10" /><Skel w="w-32" h="h-3" /></div>
             ) : (
               <>
                 <div className={`num-xl mb-1 ${!debtor ? 'num-pos' : isGreen ? 'num-pos' : 'num-neg'}`}>
@@ -154,20 +139,11 @@ export default function DashboardPage() {
                     </div>
                     {loading ? <Skel h="h-12" /> : (
                       <div className="space-y-1">
-                        {[
-                          ['PAGÓ',    pb?.paid   ?? 0],
-                          ['CORR',    pb?.should ?? 0],
-                          ['SALDO',   pb?.balance ?? 0],
-                        ].map(([lbl, val]) => (
+                        {[['PAGÓ', pb?.paid ?? 0], ['CORR', pb?.should ?? 0], ['SALDO', pb?.balance ?? 0]].map(([lbl, val]) => (
                           <div key={lbl as string} className="flex justify-between items-baseline">
                             <span className="lbl">{lbl as string}</span>
-                            <span className={`num text-xs font-medium ${
-                              lbl === 'SALDO'
-                                ? (val as number) >= 0 ? 'num-pos' : 'num-neg'
-                                : 'num-neu'
-                            }`}>
-                              {lbl === 'SALDO' && (val as number) > 0 ? '+' : ''}
-                              {fmtARS(val as number, true)}
+                            <span className={`num text-xs font-medium ${lbl === 'SALDO' ? ((val as number) >= 0 ? 'num-pos' : 'num-neg') : 'num-neu'}`}>
+                              {lbl === 'SALDO' && (val as number) > 0 ? '+' : ''}{fmtARS(val as number, true)}
                             </span>
                           </div>
                         ))}
@@ -180,8 +156,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── MARKET SUMMARY (stats) ─────────────────────── */}
-        <div className="grid grid-cols-3 gap-2 animate-fade-up stagger-1">
+        {/* ── STATS ─────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2">
           {[
             { lbl: 'VOL. INGR', val: bal?.totalIncome  ?? 0, col: 'var(--accent)', up: true },
             { lbl: 'VOL. EGRE', val: bal?.totalExpense ?? 0, col: 'var(--danger)', up: false },
@@ -200,20 +176,17 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── MARKETS (by business) ──────────────────────── */}
-        <div className="animate-fade-up stagger-2">
+        {/* ── MERCADOS ──────────────────────────────────── */}
+        <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="lbl">MERCADOS</div>
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, var(--border), transparent)' }} />
           </div>
-
-          {/* Header row */}
           <div className="grid grid-cols-4 gap-2 px-3 mb-1">
             {['NEGOCIO','INGRESOS','GASTOS','BALANCE'].map(h => (
               <div key={h} className="lbl text-right first:text-left" style={{ fontSize: '0.58rem' }}>{h}</div>
             ))}
           </div>
-
           <div className="space-y-1">
             {loading
               ? [1,2,3].map(i => <Skel key={i} h="h-12" />)
@@ -222,31 +195,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── ORDER BOOK (recent movements) ─────────────── */}
-        <div className="animate-fade-up stagger-3">
+        {/* ── ÚLTIMAS OPERACIONES ───────────────────────── */}
+        <div>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="lbl">ÚLTIMAS OPERACIONES</div>
               <div className="w-1 h-1 rounded-full animate-blink" style={{ background: 'var(--accent)' }} />
             </div>
-            <a href="/movimientos" className="lbl hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--accent)' }}>VER TODAS →</a>
+            <a href="/movimientos" className="lbl hover:opacity-70 transition-opacity" style={{ color: 'var(--accent)' }}>
+              VER TODAS →
+            </a>
           </div>
-
           <div className="card overflow-hidden">
-            {/* Table header */}
             <div className="grid px-3 py-2" style={{ gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: 8, borderBottom: '1px solid var(--border)', background: 'var(--s2)' }}>
               {['FECHA','CONCEPTO','PAGÓ','MONTO'].map(h => (
                 <div key={h} className="lbl text-right first:text-left" style={{ fontSize: '0.58rem' }}>{h}</div>
               ))}
             </div>
-
             {loading
-              ? [1,2,3,4,5].map(i => (
-                  <div key={i} className="px-3 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <Skel h="h-4" />
-                  </div>
-                ))
+              ? [1,2,3,4,5].map(i => <div key={i} className="px-3 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}><Skel h="h-4" /></div>)
               : !data?.recentMovements.length
                 ? <div className="p-8 text-center lbl" style={{ color: 'var(--text3)' }}>SIN OPERACIONES</div>
                 : data.recentMovements.map(m => <TradeRow key={m.id} m={m} />)
@@ -256,22 +223,17 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* ── FAB ───────────────────────────────────────────── */}
-      <button
-        onClick={() => setDrawer(true)}
+      {/* FAB */}
+      <button onClick={() => setDrawer(true)}
         className="fixed bottom-20 right-4 w-12 h-12 rounded-sm flex items-center justify-center z-40 animate-glow"
-        style={{ background: 'var(--accent)', color: '#07090d',
-          boxShadow: 'var(--glow-g)', border: '1px solid rgba(0,255,136,0.5)' }}>
+        style={{ background: 'var(--accent)', color: '#07090d', boxShadow: 'var(--glow-g)', border: '1px solid rgba(0,255,136,0.5)' }}>
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
           <path d="M12 5v14M5 12h14"/>
         </svg>
       </button>
 
-      <MovementDrawer
-        open={drawer}
-        onClose={() => setDrawer(false)}
-        onSaved={() => { setDrawer(false); load(period) }}
-      />
+      <MovementDrawer open={drawer} onClose={() => setDrawer(false)}
+        onSaved={() => { setDrawer(false); load(period) }} />
     </div>
   )
 }
@@ -281,11 +243,8 @@ function BizRow({ bb }: { bb: BusinessBalance }) {
   const isZero  = Math.abs(balance) < 1
   return (
     <div className="card grid items-center px-3 py-2.5 transition-all hover:border-[var(--border2)]"
-      style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8,
-        borderLeft: `2px solid ${bb.business.color}` }}>
-      <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
-        {bb.business.name}
-      </div>
+      style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, borderLeft: `2px solid ${bb.business.color}` }}>
+      <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>{bb.business.name}</div>
       <div className="num text-xs text-right num-pos">{fmtARS(bb.totalIncome, true)}</div>
       <div className="num text-xs text-right num-neg">{fmtARS(bb.totalExpense, true)}</div>
       <div className={`num text-xs text-right font-semibold ${isZero ? 'num-neu' : balance > 0 ? 'num-pos' : 'num-neg'}`}>
@@ -302,8 +261,9 @@ function TradeRow({ m }: { m: Movement }) {
       style={{ gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: 8, borderBottom: '1px solid var(--border)' }}>
       <div className="lbl" style={{ color: 'var(--text3)' }}>{fmtDate(m.date)}</div>
       <div className="flex items-center gap-1.5 min-w-0">
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isIncome ? 'bg-[var(--accent)]' : 'bg-[var(--danger)]'}`}
-          style={{ boxShadow: isIncome ? '0 0 4px var(--accent)' : '0 0 4px var(--danger)' }} />
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0`}
+          style={{ background: isIncome ? 'var(--accent)' : 'var(--danger)',
+            boxShadow: isIncome ? '0 0 4px var(--accent)' : '0 0 4px var(--danger)' }} />
         <span className="text-xs font-mono truncate" style={{ color: 'var(--text)' }}>
           {m.description || (m.categories as any)?.name || '—'}
         </span>

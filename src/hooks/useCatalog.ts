@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import type { Business, Category, SplitRule } from '@/types'
-import { createClient } from '@/lib/supabase/client'
 
 interface CatalogData {
   businesses:    Business[]
@@ -18,7 +17,9 @@ interface State extends CatalogData {
 
 let cached: CatalogData | null = null
 
-export function invalidateCatalogCache() { cached = null }
+export function invalidateCatalogCache() {
+  cached = null
+}
 
 export function useCatalog() {
   const [state, setState] = useState<State>({
@@ -52,42 +53,19 @@ export function useCatalog() {
       loadData()
     }
 
-    // Intentar Realtime — si falla, continúa sin él
-    let channel: any = null
-    try {
-      const supabase = createClient()
-      channel = supabase
-        .channel('catalog-realtime')
-        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'categories' }, () => {
-          cached = null; loadData()
-        })
-        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'businesses' }, () => {
-          cached = null; loadData()
-        })
-        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'split_rules' }, () => {
-          cached = null; loadData()
-        })
-        .subscribe((status: string) => {
-          // Si falla silenciosamente, no hay problema — funciona sin realtime
-          if (status === 'CHANNEL_ERROR') console.info('Realtime no disponible, usando modo sin sincronización')
-        })
-    } catch (e) {
-      // Realtime no disponible — funciona igual sin él
+    // Refresco al volver al foco (cuando cambiás de app/pestaña)
+    function handleFocus() {
+      cached = null
+      loadData()
     }
-
-    // Refresco al volver al foco como fallback
-    function handleFocus() { cached = null; loadData() }
     window.addEventListener('focus', handleFocus)
-
-    return () => {
-      if (channel) {
-        try { createClient().removeChannel(channel) } catch(e) {}
-      }
-      window.removeEventListener('focus', handleFocus)
-    }
+    return () => window.removeEventListener('focus', handleFocus)
   }, [])
 
-  function invalidate() { cached = null; loadData() }
+  function invalidate() {
+    cached = null
+    loadData()
+  }
 
   return { ...state, invalidate }
 }
