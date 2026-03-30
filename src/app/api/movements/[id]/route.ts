@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (fetchError || !current) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
   // Recalcular porcentajes si cambia negocio/categoría y no hay override manual
-  const willBeOverride = updates.split_override ?? current.split_override
+  const willBeOverride = updates.split_override ?? (current as any).split_override
   if (!willBeOverride && (updates.business_id || updates.category_id)) {
     const { data: rules } = await supabase.from('split_rules').select('*')
     const resolved = resolveRule(
