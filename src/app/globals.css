@@ -4,7 +4,6 @@
 
 @layer base {
   :root {
-    /* ── Crypto terminal palette ──────────────────────── */
     --bg:      #07090d;
     --surface: #0c0f16;
     --s2:      #111720;
@@ -12,17 +11,16 @@
     --border:  #1c2638;
     --border2: #243044;
     --text:    #c8d4e8;
-    --text2:   #5f7390;
-    --text3:   #344256;
+    --text2:   #7a90aa;   /* was #5f7390 — más legible */
+    --text3:   #566880;   /* was #344256 — MUCHO más legible */
 
-    --accent:  #00ff88;   /* primary green — Binance-style */
-    --cyan:    #00e5ff;   /* secondary cyan */
+    --accent:  #00ff88;
+    --cyan:    #00e5ff;
     --warn:    #f0b429;
     --danger:  #ff3355;
     --mau:     #00ff88;
     --juani:   #00e5ff;
 
-    /* Glows */
     --glow-g:  0 0 24px rgba(0,255,136,0.22), 0 0 80px rgba(0,255,136,0.07);
     --glow-c:  0 0 24px rgba(0,229,255,0.22),  0 0 80px rgba(0,229,255,0.07);
     --glow-r:  0 0 24px rgba(255,51,85,0.22),  0 0 80px rgba(255,51,85,0.07);
@@ -42,7 +40,6 @@
     font-family: 'IBM Plex Mono', 'DM Mono', monospace;
     min-height: 100dvh;
     line-height: 1.5;
-    /* Subtle scan-line texture — the crypto terminal touch */
     background-image:
       repeating-linear-gradient(
         0deg,
@@ -53,20 +50,17 @@
       );
   }
 
-  /* Scrollbar */
   ::-webkit-scrollbar { width: 3px; height: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-  /* Suppress number input spinners */
   input[type=number]::-webkit-inner-spin-button,
   input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; }
 
-  /* Custom select arrow — monochrome */
   select {
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%235f7390' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237a90aa' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     padding-right: 28px !important;
@@ -74,8 +68,6 @@
 }
 
 @layer components {
-
-  /* ══ FORM CONTROLS ════════════════════════════════════ */
   .ctrl {
     @apply w-full px-3 py-2.5 rounded-md text-sm outline-none transition-all duration-150;
     background: var(--s2);
@@ -92,7 +84,6 @@
   .ctrl::placeholder { color: var(--text3); }
   .ctrl option { background: var(--s2); color: var(--text); }
 
-  /* Large mono amount input */
   .ctrl-amount {
     @apply ctrl;
     font-size: 1.5rem;
@@ -102,7 +93,6 @@
   }
   .ctrl-amount:focus { box-shadow: 0 0 0 3px rgba(0,255,136,0.09), var(--glow-g); }
 
-  /* ══ BUTTONS ══════════════════════════════════════════ */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-md font-medium
            transition-all duration-150 select-none cursor-pointer;
@@ -145,7 +135,6 @@
   }
   .btn-icon:hover { color: var(--text); border-color: var(--border2); background: var(--s3); }
 
-  /* ══ CARD ═════════════════════════════════════════════ */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -153,7 +142,6 @@
     position: relative;
   }
 
-  /* Glowing border variant */
   .card-glow-g {
     border-color: rgba(0,255,136,0.25);
     box-shadow: var(--glow-g), inset 0 0 30px rgba(0,255,136,0.03);
@@ -163,7 +151,6 @@
     box-shadow: var(--glow-r), inset 0 0 30px rgba(255,51,85,0.03);
   }
 
-  /* Ticker line — the top accent strip on cards */
   .ticker-strip::before {
     content: '';
     position: absolute;
@@ -175,7 +162,6 @@
   .ticker-strip-c::before { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
   .ticker-strip-r::before { background: linear-gradient(90deg, transparent, var(--danger), transparent); }
 
-  /* ══ BADGE ════════════════════════════════════════════ */
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wider;
     font-family: 'IBM Plex Mono', 'DM Mono', monospace;
@@ -185,54 +171,33 @@
   .badge-sell   { background: rgba(255,51,85,0.1);  color: var(--danger); border: 1px solid rgba(255,51,85,0.2); }
   .badge-mau    { background: rgba(0,255,136,0.08); color: var(--mau);    border: 1px solid rgba(0,255,136,0.15); }
   .badge-juani  { background: rgba(0,229,255,0.08); color: var(--juani);  border: 1px solid rgba(0,229,255,0.15); }
-  .badge-neutral{ background: rgba(255,255,255,0.04); color: var(--text3); border: 1px solid var(--border); }
+  .badge-neutral{ background: rgba(255,255,255,0.04); color: var(--text2); border: 1px solid var(--border); }
 
-  /* ══ MONO NUMBER ══════════════════════════════════════ */
   .num {
     font-family: 'IBM Plex Mono', 'DM Mono', monospace;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
-
-  /* Price display sizes */
   .num-xl  { @apply num text-4xl font-semibold; letter-spacing: -0.04em; }
   .num-lg  { @apply num text-2xl font-semibold; letter-spacing: -0.03em; }
   .num-md  { @apply num text-base font-medium; }
   .num-sm  { @apply num text-xs; }
-
-  /* Positive / negative with color */
   .num-pos { color: var(--accent); }
   .num-neg { color: var(--danger); }
   .num-neu { color: var(--text2); }
 
-  /* ══ LABEL ════════════════════════════════════════════ */
+  /* lbl — labels de columnas, secciones, etc. Ahora más legibles */
   .lbl {
     font-family: 'IBM Plex Mono', 'DM Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text3);
   }
 
-  /* ══ DIVIDER ══════════════════════════════════════════ */
   .divider { border: none; border-top: 1px solid var(--border); }
 }
 
-/* ══ TICKER SCROLL — horizontal marquee for section labels ══ */
-@keyframes ticker {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-.ticker-scroll {
-  overflow: hidden;
-  white-space: nowrap;
-}
-.ticker-scroll > div {
-  display: inline-block;
-  animation: ticker 18s linear infinite;
-}
-
-/* ══ ANIMATIONS ══════════════════════════════════════════════ */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -253,30 +218,19 @@
   0%, 100% { box-shadow: var(--glow-g); }
   50%       { box-shadow: 0 0 40px rgba(0,255,136,0.35), 0 0 100px rgba(0,255,136,0.12); }
 }
-@keyframes scanline {
-  0%   { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-@keyframes numberFlash {
-  0%   { color: #fff; }
-  100% { color: inherit; }
-}
 
 .animate-fade-up  { animation: fadeUp  0.2s cubic-bezier(0.4,0,0.2,1) both; }
 .animate-fade-in  { animation: fadeIn  0.15s ease both; }
 .animate-slide-up { animation: slideUp 0.26s cubic-bezier(0.16,1,0.3,1) both; }
 .animate-blink    { animation: blink 1s step-end infinite; }
 .animate-glow     { animation: glowPulse 2.5s ease-in-out infinite; }
-.animate-flash    { animation: numberFlash 0.3s ease-out; }
 
-/* Stagger children */
 .stagger-1 { animation-delay: 0.04s; }
 .stagger-2 { animation-delay: 0.08s; }
 .stagger-3 { animation-delay: 0.12s; }
 .stagger-4 { animation-delay: 0.16s; }
 .stagger-5 { animation-delay: 0.20s; }
 
-/* ══ GRID OVERLAY (crypto chart background texture) ══════════ */
 .grid-bg {
   background-image:
     linear-gradient(rgba(0,255,136,0.025) 1px, transparent 1px),
@@ -284,13 +238,6 @@
   background-size: 32px 32px;
 }
 
-/* ══ SCROLLBAR HIDE ══════════════════════════════════════════ */
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
-
-/* ══ SAFE AREA ═══════════════════════════════════════════════ */
 .pb-safe { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-
-/* ══ PRICE CHANGE FLASH ══════════════════════════════════════ */
-.flash-green { animation: numberFlash 0.4s ease-out; color: var(--accent); }
-.flash-red   { animation: numberFlash 0.4s ease-out; color: var(--danger); }

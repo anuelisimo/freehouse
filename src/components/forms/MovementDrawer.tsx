@@ -30,7 +30,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   const [form, setF]        = useState<F>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
-  const [advanced, setAdv]  = useState(false)
+  const [advanced, setAdv]  = useState(true)
   const [templates, setTmpl] = useState<Template[]>([])
   const [query, setQuery]    = useState('')
   const [showSugg, setShowSugg] = useState(false)
@@ -43,7 +43,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   useEffect(() => {
     if (open) {
       setF({ ...EMPTY, date: todayISO() })
-      setAdv(false); setQuery(''); setError(''); setShowSugg(false)
+      setAdv(true); setQuery(''); setError(''); setShowSugg(false)
       setTimeout(() => amtRef.current?.focus(), 150)
     }
   }, [open])

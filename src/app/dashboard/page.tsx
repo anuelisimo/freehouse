@@ -263,7 +263,7 @@ function BizRow({ bb }: { bb: BusinessBalance }) {
       style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8,
         borderLeft: `2px solid ${bb.business.color}` }}>
       <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
-        {bb.business.name.replace('FREE', '')}
+        {bb.business.name}
       </div>
       <div className="num text-xs text-right num-pos">{fmtARS(bb.totalIncome, true)}</div>
       <div className="num text-xs text-right num-neg">{fmtARS(bb.totalExpense, true)}</div>
