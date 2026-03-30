@@ -178,7 +178,7 @@ function TmplRow({ t, last, onUse, onEdit, onDelete, onFav, deleting }: {
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>
-            {biz?.name?.replace('FREE','') ?? '—'}
+            {biz?.name ?? '—'}
           </span>
           <span className="lbl">·</span>
           <span className="lbl">{cat?.name ?? '—'}</span>
@@ -424,7 +424,7 @@ function BulkModal({ templates, onClose, onSaved }: {
                   {t.name}
                 </div>
                 <div className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>
-                  {biz?.name?.replace('FREE','') ?? '—'}
+                  {biz?.name ?? '—'}
                   {' · '}
                   <span style={{ color: t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
                     {t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
@@ -473,22 +473,24 @@ function Overlay({ children, onClose, wide = false }: {
 }) {
   return (
     <>
-      <div className="fixed inset-0 z-40 animate-fade-in"
+      <div className="fixed inset-0 z-40 animate-fade-in flex items-center justify-center p-4"
         style={{ background: 'rgba(7,9,13,0.85)', backdropFilter: 'blur(6px)' }}
-        onClick={onClose} />
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 animate-fade-up rounded-sm overflow-hidden"
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border2)',
-          boxShadow: '0 0 60px rgba(0,0,0,0.8)',
-          maxWidth: wide ? 480 : 400,
-          margin: '0 auto',
-          maxHeight: '85dvh',
-          overflowY: 'auto',
-        }}>
-        {/* Top accent */}
-        <div className="h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
-        <div className="p-5">{children}</div>
+        onClick={onClose}>
+        <div
+          className="z-50 animate-fade-up rounded-sm overflow-hidden w-full"
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border2)',
+            boxShadow: '0 0 60px rgba(0,0,0,0.8)',
+            maxWidth: wide ? 480 : 400,
+            maxHeight: '85dvh',
+            overflowY: 'auto',
+          }}
+          onClick={e => e.stopPropagation()}>
+          {/* Top accent */}
+          <div className="h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
+          <div className="p-5">{children}</div>
+        </div>
       </div>
     </>
   )
