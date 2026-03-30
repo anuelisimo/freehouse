@@ -53,7 +53,6 @@ export function useCatalog() {
       loadData()
     }
 
-    // Refresco al volver al foco (cuando cambiás de app/pestaña)
     function handleFocus() {
       cached = null
       loadData()
