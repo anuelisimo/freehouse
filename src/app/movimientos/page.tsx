@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import type { Movement, Business, Category } from '@/types'
-import { fmtARS, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
+import type { Movement, Business } from '@/types'
+import { fmtARS, fmtDate, fmtPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
 interface Meta { total: number; pages: number }
 
-// ── Tipos locales ──────────────────────────────────────────
 interface Filters {
   period:      string
   business_id: string
@@ -17,24 +16,22 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = { period: '', business_id: '', type: '', paid_by: '' }
 
-// ── Componente principal ───────────────────────────────────
 export default function MovimientosPage() {
-  const [movs,      setMovs]    = useState<Movement[]>([])
-  const [meta,      setMeta]    = useState<Meta>({ total: 0, pages: 1 })
-  const [page,      setPage]    = useState(1)
-  const [loading,   setLoading] = useState(true)
-  const [filters,   setFilters] = useState<Filters>(EMPTY_FILTERS)
-  const [periods,   setPeriods] = useState<string[]>([])
-  const [businesses, setBiz]    = useState<Business[]>([])
-  const [drawer,    setDrawer]  = useState(false)
-  const [editId,    setEditId]  = useState<string | null>(null)
-  const [deleting,  setDel]     = useState<string | null>(null)
+  const [movs,       setMovs]    = useState<Movement[]>([])
+  const [meta,       setMeta]    = useState<Meta>({ total: 0, pages: 1 })
+  const [page,       setPage]    = useState(1)
+  const [loading,    setLoading] = useState(true)
+  const [filters,    setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [periods,    setPeriods] = useState<string[]>([])
+  const [businesses, setBiz]     = useState<Business[]>([])
+  const [drawer,     setDrawer]  = useState(false)
+  const [editId,     setEditId]  = useState<string | null>(null)
+  const [deleting,   setDel]     = useState<string | null>(null)
+  const [exporting,  setExport]  = useState(false)
 
-  // Cargar catálogo una vez
   useEffect(() => {
-    fetch('/api/catalog').then(r => r.json()).then(j => {
-      setBiz(j.data?.businesses ?? [])
-    })
+    fetch('/api/catalog').then(r => r.json()).then(j => setBiz(j.data?.businesses ?? []))
+    fetch('/api/dashboard').then(r => r.json()).then(j => setPeriods(j.data?.periods ?? []))
   }, [])
 
   const load = useCallback(async (f: Filters, p: number) => {
@@ -44,7 +41,6 @@ export default function MovimientosPage() {
     if (f.business_id) q.set('business_id', f.business_id)
     if (f.type)        q.set('type',        f.type)
     if (f.paid_by)     q.set('paid_by',     f.paid_by)
-
     const res  = await fetch(`/api/movements?${q}`)
     const json = await res.json()
     setMovs(json.data ?? [])
@@ -52,22 +48,12 @@ export default function MovimientosPage() {
     setLoading(false)
   }, [])
 
-  // Cargar períodos disponibles
-  useEffect(() => {
-    fetch('/api/dashboard').then(r => r.json()).then(j => {
-      setPeriods(j.data?.periods ?? [])
-    })
-  }, [])
-
   useEffect(() => { load(filters, page) }, [filters, page, load])
 
   function setFilter<K extends keyof Filters>(k: K, v: string) {
-    setFilters(f => ({ ...f, [k]: v }))
-    setPage(1)
+    setFilters(f => ({ ...f, [k]: v })); setPage(1)
   }
-
   function clearFilters() { setFilters(EMPTY_FILTERS); setPage(1) }
-
   function openEdit(id: string) { setEditId(id); setDrawer(true) }
   function openNew()            { setEditId(null); setDrawer(true) }
 
@@ -77,6 +63,101 @@ export default function MovimientosPage() {
     await fetch(`/api/movements/${id}`, { method: 'DELETE' })
     setDel(null)
     load(filters, page)
+  }
+
+  // ── EXPORTAR A EXCEL (CSV con BOM para que Excel lo abra bien) ──
+  async function handleExport() {
+    setExport(true)
+    try {
+      // Traer TODOS los movimientos con los filtros activos (sin paginación)
+      const q = new URLSearchParams({ limit: '2000' })
+      if (filters.period)      q.set('period',      filters.period)
+      if (filters.business_id) q.set('business_id', filters.business_id)
+      if (filters.type)        q.set('type',        filters.type)
+      if (filters.paid_by)     q.set('paid_by',     filters.paid_by)
+
+      const res  = await fetch(`/api/movements?${q}`)
+      const json = await res.json()
+      const data: Movement[] = json.data ?? []
+
+      if (data.length === 0) {
+        alert('No hay movimientos para exportar')
+        setExport(false)
+        return
+      }
+
+      // Construir CSV
+      const headers = [
+        'Fecha',
+        'Tipo',
+        'Negocio',
+        'Categoría',
+        'Descripción',
+        'Moneda',
+        'Monto',
+        'Monto ARS',
+        'Tipo de cambio',
+        'Pagado por',
+        'Registrado por',
+        '% Mau',
+        '% Juani',
+        'Corresponde Mau (ARS)',
+        'Corresponde Juani (ARS)',
+        'Afecta balance',
+      ]
+
+      const rows = data.map(m => {
+        const amtARS   = Number(m.amount_ars)
+        const mauAmt   = amtARS * (Number(m.pct_mau)   / 100)
+        const juaniAmt = amtARS * (Number(m.pct_juani) / 100)
+        const biz = (m.businesses as any)?.name ?? ''
+        const cat = (m.categories as any)?.name ?? ''
+        const creator = (m.profiles as any)?.name ?? ''
+
+        return [
+          m.date,
+          m.type,
+          biz,
+          cat,
+          m.description ?? '',
+          m.currency,
+          String(m.amount).replace('.', ','),
+          String(amtARS.toFixed(2)).replace('.', ','),
+          String(m.exchange_rate).replace('.', ','),
+          m.paid_by === 'mau' ? 'Mau' : 'Juani',
+          creator,
+          String(m.pct_mau),
+          String(m.pct_juani),
+          String(mauAmt.toFixed(2)).replace('.', ','),
+          String(juaniAmt.toFixed(2)).replace('.', ','),
+          m.affects_balance ? 'Sí' : 'No',
+        ]
+      })
+
+      // CSV con separador ; (estándar europeo/argentino para Excel)
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+        .join('\n')
+
+      // BOM UTF-8 para que Excel muestre bien los acentos
+      const bom = '\uFEFF'
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+
+      // Nombre del archivo con fecha y filtros aplicados
+      const dateStr = new Date().toISOString().slice(0, 10)
+      const suffix  = filters.period ? `_${fmtPeriod(filters.period).replace(' ', '-')}` : ''
+      a.href     = url
+      a.download = `freehouse_movimientos${suffix}_${dateStr}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+
+    } catch (e) {
+      alert('Error al exportar')
+    } finally {
+      setExport(false)
+    }
   }
 
   const hasFilters = Object.values(filters).some(Boolean)
@@ -89,63 +170,74 @@ export default function MovimientosPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-mono font-semibold uppercase tracking-wide">Operaciones</div>
-            <div className="lbl mt-0.5">
-              {loading ? '…' : `${meta.total} registros`}
-            </div>
+            <div className="lbl mt-0.5">{loading ? '…' : `${meta.total} registros`}</div>
           </div>
-          <button onClick={openNew} className="btn-primary px-4 py-2 text-xs">
-            + NUEVA
-          </button>
+          <div className="flex gap-2">
+            {/* Botón exportar */}
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="btn-ghost text-xs px-3 py-2 flex items-center gap-1.5"
+              style={{ opacity: exporting ? 0.6 : 1 }}
+              title="Exportar a Excel"
+            >
+              {exporting ? (
+                <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              ) : (
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+              )}
+              {exporting ? 'EXPORTANDO…' : 'EXCEL'}
+            </button>
+            <button onClick={openNew} className="btn-primary px-4 py-2 text-xs">+ NUEVA</button>
+          </div>
         </div>
 
         {/* ── FILTERS ─────────────────────────────────── */}
         <div className="space-y-2">
-          {/* Row 1: period + business */}
           <div className="grid grid-cols-2 gap-2">
-            <select className="ctrl" value={filters.period}
-              onChange={e => setFilter('period', e.target.value)}>
+            <select className="ctrl" value={filters.period} onChange={e => setFilter('period', e.target.value)}>
               <option value="">Todos los meses</option>
-              {periods.map(p => (
-                <option key={p} value={p}>{fmtPeriod(p)}</option>
-              ))}
+              {periods.map(p => <option key={p} value={p}>{fmtPeriod(p)}</option>)}
             </select>
-            <select className="ctrl" value={filters.business_id}
-              onChange={e => setFilter('business_id', e.target.value)}>
+            <select className="ctrl" value={filters.business_id} onChange={e => setFilter('business_id', e.target.value)}>
               <option value="">Todos los negocios</option>
-              {businesses.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+              {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
-          {/* Row 2: type + paid_by + clear */}
           <div className="flex gap-2">
-            <select className="ctrl flex-1" value={filters.type}
-              onChange={e => setFilter('type', e.target.value)}>
+            <select className="ctrl flex-1" value={filters.type} onChange={e => setFilter('type', e.target.value)}>
               <option value="">Tipo</option>
               <option value="gasto">▲ Gastos</option>
               <option value="ingreso">▼ Ingresos</option>
             </select>
-            <select className="ctrl flex-1" value={filters.paid_by}
-              onChange={e => setFilter('paid_by', e.target.value)}>
+            <select className="ctrl flex-1" value={filters.paid_by} onChange={e => setFilter('paid_by', e.target.value)}>
               <option value="">Por quien</option>
               <option value="mau">Mau</option>
               <option value="juani">Juani</option>
             </select>
             {hasFilters && (
-              <button onClick={clearFilters} className="btn-icon flex-shrink-0 text-xs px-3"
-                style={{ color: 'var(--danger)' }}>
-                ✕
-              </button>
+              <button onClick={clearFilters} className="btn-icon flex-shrink-0 text-xs px-3" style={{ color: 'var(--danger)' }}>✕</button>
             )}
           </div>
         </div>
+
+        {/* Aviso filtros activos en export */}
+        {hasFilters && (
+          <div className="lbl px-1" style={{ color: 'var(--accent)' }}>
+            ↓ El export descargará solo los movimientos filtrados
+          </div>
+        )}
 
         {/* ── LIST ────────────────────────────────────── */}
         {loading ? (
           <div className="space-y-2">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="card h-16 animate-pulse"
-                style={{ background: 'var(--s2)' }} />
+              <div key={i} className="card h-16 animate-pulse" style={{ background: 'var(--s2)' }} />
             ))}
           </div>
         ) : movs.length === 0 ? (
@@ -156,14 +248,9 @@ export default function MovimientosPage() {
         ) : (
           <div className="card overflow-hidden">
             {movs.map((m, i) => (
-              <MovRow
-                key={m.id}
-                m={m}
-                last={i === movs.length - 1}
-                onEdit={() => openEdit(m.id)}
-                onDelete={() => handleDelete(m.id)}
-                deleting={deleting === m.id}
-              />
+              <MovRow key={m.id} m={m} last={i === movs.length - 1}
+                onEdit={() => openEdit(m.id)} onDelete={() => handleDelete(m.id)}
+                deleting={deleting === m.id} />
             ))}
           </div>
         )}
@@ -171,21 +258,13 @@ export default function MovimientosPage() {
         {/* ── PAGINATION ──────────────────────────────── */}
         {meta.pages > 1 && (
           <div className="flex items-center justify-center gap-3">
-            <button
-              className="btn-ghost text-xs px-3 py-1.5"
-              disabled={page <= 1}
-              onClick={() => setPage(p => p - 1)}
-              style={{ opacity: page <= 1 ? 0.3 : 1 }}
-            >
+            <button className="btn-ghost text-xs px-3 py-1.5" disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)} style={{ opacity: page <= 1 ? 0.3 : 1 }}>
               ← PREV
             </button>
             <span className="lbl">{page} / {meta.pages}</span>
-            <button
-              className="btn-ghost text-xs px-3 py-1.5"
-              disabled={page >= meta.pages}
-              onClick={() => setPage(p => p + 1)}
-              style={{ opacity: page >= meta.pages ? 0.3 : 1 }}
-            >
+            <button className="btn-ghost text-xs px-3 py-1.5" disabled={page >= meta.pages}
+              onClick={() => setPage(p => p + 1)} style={{ opacity: page >= meta.pages ? 0.3 : 1 }}>
               NEXT →
             </button>
           </div>
@@ -204,8 +283,7 @@ export default function MovimientosPage() {
       </button>
 
       <MovementDrawer
-        open={drawer}
-        editId={editId}
+        open={drawer} editId={editId}
         onClose={() => { setDrawer(false); setEditId(null) }}
         onSaved={() => { setDrawer(false); setEditId(null); load(filters, page) }}
       />
@@ -214,14 +292,9 @@ export default function MovimientosPage() {
 }
 
 // ── Fila de movimiento ─────────────────────────────────────
-function MovRow({
-  m, last, onEdit, onDelete, deleting
-}: {
-  m: Movement
-  last: boolean
-  onEdit: () => void
-  onDelete: () => void
-  deleting: boolean
+function MovRow({ m, last, onEdit, onDelete, deleting }: {
+  m: Movement; last: boolean
+  onEdit: () => void; onDelete: () => void; deleting: boolean
 }) {
   const isIncome = m.type === 'ingreso'
   const biz = (m.businesses as any)
@@ -230,8 +303,6 @@ function MovRow({
   return (
     <div className="flex items-center gap-3 px-3 py-3 transition-all hover:bg-[var(--s2)]"
       style={{ borderBottom: last ? 'none' : '1px solid var(--border)' }}>
-
-      {/* Type indicator */}
       <div className="w-7 h-7 rounded-sm flex items-center justify-center flex-shrink-0 text-sm font-mono"
         style={{
           background: isIncome ? 'rgba(0,255,136,0.08)' : 'rgba(255,51,85,0.08)',
@@ -239,16 +310,12 @@ function MovRow({
         }}>
         {isIncome ? '▼' : '▲'}
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
           {m.description || cat?.name || '—'}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>
-            {biz?.name?.replace('FREE', '') ?? '—'}
-          </span>
+          <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>{biz?.name ?? '—'}</span>
           <span className="lbl">·</span>
           <span className="lbl" style={{ color: m.paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
             {m.paid_by === 'mau' ? 'MAU' : 'JUA'}
@@ -257,18 +324,12 @@ function MovRow({
           <span className="lbl">{fmtDate(m.date)}</span>
         </div>
       </div>
-
-      {/* Amount */}
       <div className="text-right flex-shrink-0 mr-1">
         <div className={`num text-sm font-semibold ${isIncome ? 'num-pos' : 'num-neg'}`}>
           {isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
         </div>
-        {!m.affects_balance && (
-          <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>
-        )}
+        {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>
-
-      {/* Actions */}
       <div className="flex gap-1 flex-shrink-0">
         <button onClick={onEdit} className="btn-icon w-7 h-7 text-xs">✏</button>
         <button onClick={onDelete} className="btn-icon w-7 h-7 text-xs"
