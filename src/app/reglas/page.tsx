@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { SplitRule, Business, Category } from '@/types'
-import { useCatalog } from '@/hooks/useCatalog'
+import { useCatalog, invalidateCatalogCache } from '@/hooks/useCatalog'
 
 // ── Tabs ──────────────────────────────────────────────────
 type Tab = 'reglas' | 'categorias' | 'negocios'
@@ -289,7 +289,7 @@ function CategoriasTab() {
     })
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Error'); setSaving(false); return }
-    setNew(''); setSaving(false); load()
+    setNew(''); setSaving(false); invalidateCatalogCache(); load()
   }
 
   async function remove(id: string, name: string) {
@@ -298,7 +298,7 @@ function CategoriasTab() {
     const res  = await fetch(`/api/categories/${id}`, { method: 'DELETE' })
     const json = await res.json()
     if (!res.ok) { alert(json.error ?? 'No se pudo eliminar'); setDel(null); return }
-    setDel(null); load()
+    setDel(null); invalidateCatalogCache(); load()
   }
 
   return (
@@ -372,7 +372,7 @@ function NegociosTab() {
     })
     const json = await res.json()
     if (!res.ok) { setError(json.error ?? 'Error'); setSaving(false); return }
-    setNew(''); setSaving(false); load()
+    setNew(''); setSaving(false); invalidateCatalogCache(); load()
   }
 
   async function saveEdit() {
@@ -383,7 +383,7 @@ function NegociosTab() {
       body: JSON.stringify({ name: editing.name, color: editing.color }),
     })
     if (!res.ok) { const j = await res.json(); setError(j.error ?? 'Error'); setSaving(false); return }
-    setEdit(null); setSaving(false); load()
+    setEdit(null); setSaving(false); invalidateCatalogCache(); load()
   }
 
   async function remove(id: string, name: string) {
@@ -392,7 +392,7 @@ function NegociosTab() {
     const res  = await fetch(`/api/businesses/${id}`, { method: 'DELETE' })
     const json = await res.json()
     if (!res.ok) { alert(json.error ?? 'No se pudo eliminar'); setDel(null); return }
-    setDel(null); load()
+    setDel(null); invalidateCatalogCache(); load()
   }
 
   return (

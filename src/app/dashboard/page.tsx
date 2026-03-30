@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import type { PeriodBalance, BusinessBalance, Movement } from '@/types'
 import { fmtARS, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
@@ -35,6 +36,26 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => { load(period) }, [period, load])
+
+  // Realtime: recargar cuando otro usuario carga un movimiento
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('movements-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movements' }, () => {
+        load(period)
+      })
+      .subscribe()
+
+    // Refresco al volver al foco
+    function handleFocus() { load(period) }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      supabase.removeChannel(channel)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [period, load])
 
   const bal      = data?.globalBalance
   const debtor   = bal?.debtor
