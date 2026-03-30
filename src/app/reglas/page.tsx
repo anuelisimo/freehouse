@@ -6,10 +6,10 @@ import { useCatalog } from '@/hooks/useCatalog'
 
 export default function ReglasPage() {
   const { businesses, categories } = useCatalog()
-  const [rules,   setRules]  = useState<SplitRule[]>([])
-  const [loading, setLoad]   = useState(true)
-  const [modal,   setModal]  = useState<SplitRule | 'new' | null>(null)
-  const [deleting, setDel]   = useState<string | null>(null)
+  const [rules,    setRules]  = useState<SplitRule[]>([])
+  const [loading,  setLoad]   = useState(true)
+  const [modal,    setModal]  = useState<SplitRule | 'new' | null>(null)
+  const [deleting, setDel]    = useState<string | null>(null)
 
   async function loadRules() {
     setLoad(true)
@@ -29,13 +29,10 @@ export default function ReglasPage() {
     loadRules()
   }
 
-  // Sort: general rules first (no category), then specific
   const sorted = [...rules].sort((a, b) => {
-    // First sort by business name
     const bizA = (a.businesses as any)?.name ?? ''
     const bizB = (b.businesses as any)?.name ?? ''
     if (bizA !== bizB) return bizA.localeCompare(bizB)
-    // Then general before specific
     if (!a.category_id && b.category_id) return -1
     if (a.category_id && !b.category_id) return 1
     return ((a.categories as any)?.name ?? '').localeCompare((b.categories as any)?.name ?? '')
@@ -45,7 +42,6 @@ export default function ReglasPage() {
     <div className="h-full overflow-y-auto scrollbar-hide">
       <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-3">
 
-        {/* ── HEADER ────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-mono font-semibold uppercase tracking-wide">Reglas de Reparto</div>
@@ -56,7 +52,7 @@ export default function ReglasPage() {
           </button>
         </div>
 
-        {/* ── HOW IT WORKS (collapsed info) ─────────── */}
+        {/* Info de prioridad */}
         <div className="p-3 rounded-sm" style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
           <div className="lbl mb-1.5" style={{ color: 'var(--accent)' }}>PRIORIDAD DE RESOLUCIÓN</div>
           <div className="space-y-1">
@@ -73,7 +69,6 @@ export default function ReglasPage() {
           </div>
         </div>
 
-        {/* ── RULES TABLE ───────────────────────────── */}
         {loading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -90,7 +85,7 @@ export default function ReglasPage() {
           </div>
         ) : (
           <div className="card overflow-hidden">
-            {/* Table header */}
+            {/* Encabezado tabla */}
             <div className="grid px-3 py-2"
               style={{ gridTemplateColumns: '2fr 2fr 1fr 1fr auto', gap: 8,
                 borderBottom: '1px solid var(--border)', background: 'var(--s2)' }}>
@@ -111,10 +106,8 @@ export default function ReglasPage() {
             ))}
           </div>
         )}
-
       </div>
 
-      {/* ── MODAL ─────────────────────────────────────── */}
       {modal !== null && (
         <RuleModal
           rule={modal === 'new' ? null : modal}
@@ -128,7 +121,7 @@ export default function ReglasPage() {
   )
 }
 
-// ── Fila de regla ──────────────────────────────────────────
+// ── Fila ──────────────────────────────────────────────────
 function RuleRow({ rule, last, onEdit, onDelete, deleting }: {
   rule: SplitRule; last: boolean
   onEdit: () => void; onDelete: () => void; deleting: boolean
@@ -142,18 +135,18 @@ function RuleRow({ rule, last, onEdit, onDelete, deleting }: {
       style={{ gridTemplateColumns: '2fr 2fr 1fr 1fr auto', gap: 8,
         borderBottom: last ? 'none' : '1px solid var(--border)' }}>
 
-      {/* Business */}
+      {/* Negocio — nombre completo */}
       <div className="flex items-center gap-1.5 min-w-0">
         {biz?.color && (
           <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
             style={{ background: biz.color, boxShadow: `0 0 4px ${biz.color}` }} />
         )}
         <span className="text-xs font-mono truncate" style={{ color: 'var(--text)' }}>
-          {biz?.name?.replace('FREE','') ?? '—'}
+          {biz?.name ?? '—'}
         </span>
       </div>
 
-      {/* Category */}
+      {/* Categoría */}
       <div className="min-w-0">
         {isGeneral ? (
           <span className="lbl" style={{ color: 'var(--text3)' }}>GENERAL</span>
@@ -164,17 +157,13 @@ function RuleRow({ rule, last, onEdit, onDelete, deleting }: {
         )}
       </div>
 
-      {/* Pct Mau */}
       <div className="num text-xs font-semibold" style={{ color: 'var(--mau)' }}>
         {rule.pct_mau}%
       </div>
-
-      {/* Pct Juani */}
       <div className="num text-xs font-semibold" style={{ color: 'var(--juani)' }}>
         {rule.pct_juani}%
       </div>
 
-      {/* Actions */}
       <div className="flex gap-1">
         <button onClick={onEdit} className="btn-icon w-6 h-6 text-[10px]">✏</button>
         <button onClick={onDelete} className="btn-icon w-6 h-6 text-[10px]"
@@ -186,7 +175,7 @@ function RuleRow({ rule, last, onEdit, onDelete, deleting }: {
   )
 }
 
-// ── Modal: crear / editar regla ────────────────────────────
+// ── Modal ─────────────────────────────────────────────────
 function RuleModal({ rule, businesses, categories, onClose, onSaved }: {
   rule: SplitRule | null
   businesses: Business[]
@@ -194,67 +183,59 @@ function RuleModal({ rule, businesses, categories, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
-  const [bizId,   setBiz]   = useState(rule?.business_id ?? businesses[0]?.id ?? '')
-  const [catId,   setCat]   = useState(rule?.category_id ?? '')
-  const [pctMau,  setMau]   = useState(rule?.pct_mau ?? 50)
-  const [pctJua,  setJua]   = useState(rule?.pct_juani ?? 50)
-  const [saving,  setSave]  = useState(false)
-  const [error,   setError] = useState('')
+  const [bizId,  setBiz]  = useState(rule?.business_id ?? businesses[0]?.id ?? '')
+  const [catId,  setCat]  = useState(rule?.category_id ?? '')
+  const [pctMau, setMau]  = useState(Number(rule?.pct_mau  ?? 50))
+  const [pctJua, setJua]  = useState(Number(rule?.pct_juani ?? 50))
+  const [saving, setSave] = useState(false)
+  const [error,  setErr]  = useState('')
 
-  // Keep percentages summing to 100
+  const isEdit = !!rule?.id
+
+  // Datos de solo-lectura para edición
+  const bizName = isEdit ? (rule.businesses as any)?.name ?? bizId : null
+  const catName = isEdit
+    ? rule.category_id
+      ? (rule.categories as any)?.name ?? rule.category_id
+      : 'General (todas las categorías)'
+    : null
+
   function handleMau(v: number) {
-    const clamped = Math.min(100, Math.max(0, v))
-    setMau(clamped)
-    setJua(100 - clamped)
-    setError('')
+    const c = Math.min(100, Math.max(0, v))
+    setMau(c); setJua(100 - c); setErr('')
   }
   function handleJua(v: number) {
-    const clamped = Math.min(100, Math.max(0, v))
-    setJua(clamped)
-    setMau(100 - clamped)
-    setError('')
+    const c = Math.min(100, Math.max(0, v))
+    setJua(c); setMau(100 - c); setErr('')
   }
 
   const sumOk = Math.abs(pctMau + pctJua - 100) < 0.01
 
   async function save() {
-    if (!sumOk)  { setError('Los porcentajes deben sumar 100%'); return }
-    if (!bizId)  { setError('Seleccioná un negocio'); return }
+    if (!sumOk) { setErr('Los porcentajes deben sumar 100%'); return }
+    if (!bizId) { setErr('Seleccioná un negocio'); return }
     setSave(true)
 
-    const body = {
-      business_id:  bizId,
-      category_id:  catId || null,
-      pct_mau:      pctMau,
-      pct_juani:    pctJua,
-    }
-
-    const url    = rule?.id ? `/api/rules/${rule.id}` : '/api/rules'
-    const method = rule?.id ? 'PATCH' : 'POST'
-
-    // PATCH only accepts pct fields
-    const patchBody = rule?.id ? { pct_mau: pctMau, pct_juani: pctJua } : body
+    const url    = isEdit ? `/api/rules/${rule!.id}` : '/api/rules'
+    const method = isEdit ? 'PATCH' : 'POST'
+    const body   = isEdit
+      ? { pct_mau: pctMau, pct_juani: pctJua }
+      : { business_id: bizId, category_id: catId || null, pct_mau: pctMau, pct_juani: pctJua }
 
     const res  = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patchBody),
+      body: JSON.stringify(body),
     })
     const json = await res.json()
 
     if (!res.ok) {
-      const msg = json.error ?? 'Error al guardar'
-      // Friendly message for duplicate rule
-      setError(typeof msg === 'string' && msg.includes('duplicate') || res.status === 409
-        ? 'Ya existe una regla para este negocio/categoría'
-        : msg)
+      setErr(res.status === 409 ? 'Ya existe una regla para este negocio/categoría' : (json.error ?? 'Error al guardar'))
       setSave(false)
       return
     }
     onSaved()
   }
-
-  const isEdit = !!rule?.id
 
   return (
     <>
@@ -264,7 +245,7 @@ function RuleModal({ rule, businesses, categories, onClose, onSaved }: {
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 animate-fade-up rounded-sm"
         style={{ background: 'var(--surface)', border: '1px solid var(--border2)',
           maxWidth: 380, margin: '0 auto',
-          boxShadow: '0 0 60px rgba(0,0,0,0.8)' }}>
+          boxShadow: '0 0 60px rgba(0,0,0,0.5)' }}>
         <div className="h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
 
         <div className="p-5">
@@ -273,54 +254,67 @@ function RuleModal({ rule, businesses, categories, onClose, onSaved }: {
           </div>
 
           <div className="space-y-3">
-            {/* Business — only for new */}
-            {!isEdit && (
-              <div>
-                <div className="lbl mb-1.5">NEGOCIO</div>
-                <select className="ctrl" value={bizId} onChange={e => setBiz(e.target.value)}>
-                  {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
+
+            {/* EDICIÓN: negocio y categoría en solo lectura */}
+            {isEdit && (
+              <div className="p-3 rounded-sm" style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
+                <div className="lbl mb-2">APLICADA A</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: (rule.businesses as any)?.color ?? 'var(--accent)' }} />
+                  <span className="text-xs font-mono font-medium" style={{ color: 'var(--text)' }}>
+                    {bizName}
+                  </span>
+                  <span className="lbl">·</span>
+                  <span className="text-xs font-mono" style={{ color: 'var(--text2)' }}>
+                    {catName}
+                  </span>
+                </div>
               </div>
             )}
 
-            {/* Category — only for new */}
+            {/* NUEVA: selectores de negocio y categoría */}
             {!isEdit && (
-              <div>
-                <div className="lbl mb-1.5">CATEGORÍA <span style={{ color: 'var(--text3)' }}>(vacío = regla general)</span></div>
-                <select className="ctrl" value={catId} onChange={e => setCat(e.target.value)}>
-                  <option value="">Todas las categorías (general)</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
+              <>
+                <div>
+                  <div className="lbl mb-1.5">NEGOCIO</div>
+                  <select className="ctrl" value={bizId} onChange={e => setBiz(e.target.value)}>
+                    {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div className="lbl mb-1.5">
+                    CATEGORÍA <span style={{ color: 'var(--text3)' }}>(vacío = regla general)</span>
+                  </div>
+                  <select className="ctrl" value={catId} onChange={e => setCat(e.target.value)}>
+                    <option value="">Todas las categorías (general)</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </>
             )}
 
-            {/* Percentage inputs — the critical part */}
+            {/* Porcentajes — siempre editables */}
             <div>
               <div className="lbl mb-2">REPARTO</div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="lbl mb-1.5" style={{ color: 'var(--mau)' }}>MAU %</div>
-                  <input
-                    type="number" className="ctrl" value={pctMau}
-                    min="0" max="100" step="1"
+                  <input type="number" className="ctrl" value={pctMau} min="0" max="100" step="1"
                     onChange={e => handleMau(parseFloat(e.target.value) || 0)}
                     style={{ fontFamily: 'monospace', fontSize: '1.1rem',
-                      color: 'var(--mau)', borderColor: 'rgba(0,255,136,0.3)' }}
-                  />
+                      color: 'var(--mau)', borderColor: 'rgba(0,255,136,0.3)' }} />
                 </div>
                 <div>
                   <div className="lbl mb-1.5" style={{ color: 'var(--juani)' }}>JUANI %</div>
-                  <input
-                    type="number" className="ctrl" value={pctJua}
-                    min="0" max="100" step="1"
+                  <input type="number" className="ctrl" value={pctJua} min="0" max="100" step="1"
                     onChange={e => handleJua(parseFloat(e.target.value) || 0)}
                     style={{ fontFamily: 'monospace', fontSize: '1.1rem',
-                      color: 'var(--juani)', borderColor: 'rgba(0,229,255,0.3)' }}
-                  />
+                      color: 'var(--juani)', borderColor: 'rgba(0,229,255,0.3)' }} />
                 </div>
               </div>
 
-              {/* Sum indicator */}
+              {/* Indicador suma */}
               <div className="flex items-center justify-between mt-2 px-1">
                 <div className="lbl">TOTAL</div>
                 <div className={`num text-xs font-semibold ${sumOk ? 'num-pos' : 'num-neg'}`}>
@@ -328,13 +322,11 @@ function RuleModal({ rule, businesses, categories, onClose, onSaved }: {
                 </div>
               </div>
 
-              {/* Visual bar */}
+              {/* Barra visual */}
               <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
                 <div className="h-full rounded-full transition-all duration-200"
-                  style={{
-                    width: `${pctMau}%`,
-                    background: `linear-gradient(90deg, var(--mau), var(--juani))`,
-                  }} />
+                  style={{ width: `${pctMau}%`,
+                    background: `linear-gradient(90deg, var(--mau), var(--juani))` }} />
               </div>
               <div className="flex justify-between mt-1">
                 <span className="lbl" style={{ color: 'var(--mau)' }}>MAU {pctMau}%</span>
