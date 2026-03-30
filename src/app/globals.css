@@ -241,3 +241,113 @@
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .pb-safe { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+
+/* ══ LIGHT THEME — Fintech blanco ═══════════════════════════ */
+[data-theme="light"] {
+  --bg:      #f0f2f5;
+  --surface: #ffffff;
+  --s2:      #f5f7fa;
+  --s3:      #ebeef3;
+  --border:  #dde2ea;
+  --border2: #c8d0db;
+  --text:    #0d1117;
+  --text2:   #4a5568;
+  --text3:   #718096;
+
+  --accent:  #00c96e;   /* verde más oscuro para legibilidad en blanco */
+  --cyan:    #0099cc;
+  --warn:    #d97706;
+  --danger:  #e53e3e;
+  --mau:     #00c96e;
+  --juani:   #0099cc;
+
+  --glow-g:  0 2px 12px rgba(0,201,110,0.15);
+  --glow-c:  0 2px 12px rgba(0,153,204,0.15);
+  --glow-r:  0 2px 12px rgba(229,62,62,0.15);
+}
+
+[data-theme="light"] body {
+  background-image: none;   /* sin scan lines en modo claro */
+}
+
+[data-theme="light"] .grid-bg {
+  background-image:
+    linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Cards con sombra suave en lugar de border oscuro */
+[data-theme="light"] .card {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .card-glow-g {
+  box-shadow: 0 2px 16px rgba(0,201,110,0.12), 0 0 0 1px rgba(0,201,110,0.2);
+  border-color: rgba(0,201,110,0.25);
+}
+
+[data-theme="light"] .card-glow-r {
+  box-shadow: 0 2px 16px rgba(229,62,62,0.12), 0 0 0 1px rgba(229,62,62,0.2);
+  border-color: rgba(229,62,62,0.25);
+}
+
+/* Ticker strip en claro */
+[data-theme="light"] .ticker-strip::before {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.4;
+}
+
+/* Inputs en claro */
+[data-theme="light"] .ctrl {
+  background: #ffffff;
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+[data-theme="light"] .ctrl:focus {
+  border-color: var(--accent);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0,201,110,0.1);
+}
+
+/* Botones en claro */
+[data-theme="light"] .btn-primary {
+  box-shadow: 0 2px 8px rgba(0,201,110,0.25);
+  border-color: rgba(0,201,110,0.3);
+}
+[data-theme="light"] .btn-ghost {
+  border-color: var(--border2);
+  color: var(--text2);
+}
+[data-theme="light"] .btn-ghost:hover {
+  background: var(--s3);
+  color: var(--text);
+}
+[data-theme="light"] .btn-icon {
+  background: var(--s2);
+  border-color: var(--border);
+  color: var(--text2);
+}
+
+/* Nav inferior en claro */
+[data-theme="light"] nav {
+  box-shadow: 0 -1px 0 var(--border), 0 -4px 16px rgba(0,0,0,0.06);
+}
+
+/* Badges en claro */
+[data-theme="light"] .badge-buy    { background: rgba(0,201,110,0.1);  color: #007a42; }
+[data-theme="light"] .badge-sell   { background: rgba(229,62,62,0.1);  color: #c53030; }
+[data-theme="light"] .badge-mau    { background: rgba(0,201,110,0.1);  color: #007a42; }
+[data-theme="light"] .badge-juani  { background: rgba(0,153,204,0.1);  color: #0077a3; }
+[data-theme="light"] .badge-neutral{ background: rgba(0,0,0,0.05);     color: var(--text3); }
+
+/* Scrollbar en claro */
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--border2); }
+
+/* FAB en claro — sombra en lugar de glow neón */
+[data-theme="light"] .animate-glow {
+  animation: none;
+  box-shadow: 0 4px 20px rgba(0,201,110,0.4) !important;
+}

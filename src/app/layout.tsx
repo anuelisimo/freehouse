@@ -24,6 +24,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
+        {/* Aplicar tema guardado antes del render para evitar flash */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            try {
+              var t = localStorage.getItem('fh-theme');
+              if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            } catch(e) {}
+          })();
+        `}} />
       </head>
       <body className="h-full">{children}</body>
     </html>
