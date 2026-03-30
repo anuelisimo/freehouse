@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import type { Business, Category, SplitRule } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 
@@ -18,16 +18,13 @@ interface State extends CatalogData {
 
 let cached: CatalogData | null = null
 
-export function invalidateCatalogCache() {
-  cached = null
-}
+export function invalidateCatalogCache() { cached = null }
 
 export function useCatalog() {
   const [state, setState] = useState<State>({
     businesses: [], categories: [], exchangeRates: {}, rules: [],
     loading: !cached, error: null,
   })
-  const channelRef = useRef<any>(null)
 
   async function loadData() {
     try {
@@ -49,50 +46,48 @@ export function useCatalog() {
   }
 
   useEffect(() => {
-    // Cargar datos iniciales
     if (cached) {
       setState({ ...cached, loading: false, error: null })
     } else {
       loadData()
     }
 
-    // Suscribirse a cambios en tiempo real via Supabase Realtime
-    const supabase = createClient()
-    const channel = supabase
-      .channel('catalog-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
-        cached = null
-        loadData()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'businesses' }, () => {
-        cached = null
-        loadData()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'split_rules' }, () => {
-        cached = null
-        loadData()
-      })
-      .subscribe()
-
-    channelRef.current = channel
-
-    // Refresco al volver al foco (cuando el usuario cambia de app/pestaña)
-    function handleFocus() {
-      cached = null
-      loadData()
+    // Intentar Realtime — si falla, continúa sin él
+    let channel: any = null
+    try {
+      const supabase = createClient()
+      channel = supabase
+        .channel('catalog-realtime')
+        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'categories' }, () => {
+          cached = null; loadData()
+        })
+        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'businesses' }, () => {
+          cached = null; loadData()
+        })
+        .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'split_rules' }, () => {
+          cached = null; loadData()
+        })
+        .subscribe((status: string) => {
+          // Si falla silenciosamente, no hay problema — funciona sin realtime
+          if (status === 'CHANNEL_ERROR') console.info('Realtime no disponible, usando modo sin sincronización')
+        })
+    } catch (e) {
+      // Realtime no disponible — funciona igual sin él
     }
+
+    // Refresco al volver al foco como fallback
+    function handleFocus() { cached = null; loadData() }
     window.addEventListener('focus', handleFocus)
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        try { createClient().removeChannel(channel) } catch(e) {}
+      }
       window.removeEventListener('focus', handleFocus)
     }
   }, [])
 
-  function invalidate() {
-    cached = null
-    loadData()
-  }
+  function invalidate() { cached = null; loadData() }
 
   return { ...state, invalidate }
 }
