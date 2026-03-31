@@ -375,8 +375,8 @@ function BulkModal({ templates, onClose, onSaved }: {
           }
         }
         setLoaded(loadedIds)
-        // Pre-llenar montos de los ya cargados
-        setAmounts(prev => ({ ...prev, ...preAmounts }))
+        // Limpiar montos anteriores y pre-llenar solo los del mes seleccionado
+        setAmounts(preAmounts)
         // Auto-skipear las que ya están cargadas
         setSkipped(loadedIds)
       } catch (e) {
