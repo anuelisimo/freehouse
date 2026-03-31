@@ -41,12 +41,41 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   }, [])
 
   useEffect(() => {
-    if (open) {
+    if (!open) return
+
+    if (editId) {
+      // Modo edición: cargar datos del movimiento existente
+      setAdv(true); setQuery(''); setError(''); setShowSugg(false)
+      fetch(`/api/movements/${editId}`)
+        .then(r => r.json())
+        .then(j => {
+          const m = j.data
+          if (!m) return
+          setF({
+            type:            m.type,
+            amount:          String(m.amount),
+            currency:        m.currency ?? 'ARS',
+            date:            m.date,
+            business_id:     m.business_id,
+            category_id:     m.category_id,
+            paid_by:         m.paid_by,
+            description:     m.description ?? '',
+            affects_balance: m.affects_balance,
+            split_override:  m.split_override,
+            pct_mau:         Number(m.pct_mau),
+            pct_juani:       Number(m.pct_juani),
+          })
+          // Mostrar nombre en el campo concepto
+          const tmplName = templates.find(t => t.id === m.template_id)?.name
+          setQuery(tmplName ?? m.description ?? '')
+        })
+    } else {
+      // Modo nuevo
       setF({ ...EMPTY, date: todayISO() })
       setAdv(true); setQuery(''); setError(''); setShowSugg(false)
       setTimeout(() => amtRef.current?.focus(), 150)
     }
-  }, [open])
+  }, [open, editId])
 
   // Auto-apply template when launched from Plantillas page
   useEffect(() => {
