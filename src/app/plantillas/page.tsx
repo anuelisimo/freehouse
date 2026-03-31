@@ -407,7 +407,13 @@ function BulkModal({ templates, onClose, onSaved }: {
 
       {/* Template rows */}
       <div className="space-y-2 mb-4">
-        {templates.map(t => {
+        {[...templates].sort((a, b) => {
+          const BIZ_ORDER: Record<string, number> = { 'FREEhouse': 0, 'FREEwork': 1, 'FREEproject': 2 }
+          const orderA = BIZ_ORDER[(a.businesses as any)?.name ?? ''] ?? 99
+          const orderB = BIZ_ORDER[(b.businesses as any)?.name ?? ''] ?? 99
+          if (orderA !== orderB) return orderA - orderB
+          return a.name.localeCompare(b.name, 'es')
+        }).map(t => {
           const isSkipped = skipped.has(t.id)
           const biz = (t.businesses as any)
           return (
