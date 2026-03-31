@@ -164,23 +164,24 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
         style={{ background: 'rgba(7,9,13,0.85)', backdropFilter: 'blur(6px)' }}
         onClick={onClose} />
 
-      {/* Panel */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up"
-        style={{ background: 'var(--surface)', borderTop: '1px solid var(--border2)',
-          borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)',
-          borderRadius: '10px 10px 0 0', maxHeight: '93dvh',
-          boxShadow: '0 -20px 80px rgba(0,255,136,0.06)' }}>
+      {/* Modal centrado */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}>
+        <div className="w-full animate-fade-up rounded-sm overflow-hidden"
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border2)',
+            maxWidth: 480,
+            maxHeight: '90dvh',
+            boxShadow: '0 0 80px rgba(0,0,0,0.7), 0 0 40px rgba(0,255,136,0.06)',
+          }}
+          onClick={e => e.stopPropagation()}>
 
         {/* Top accent line */}
         <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
 
-        {/* Drag handle */}
-        <div className="flex justify-center pt-2.5 pb-1">
-          <div className="w-8 h-0.5 rounded-full" style={{ background: 'var(--border2)' }} />
-        </div>
-
-        <div className="overflow-y-auto scrollbar-hide" style={{ maxHeight: 'calc(93dvh - 20px)' }}>
-          <div className="px-4 pb-safe">
+        <div className="overflow-y-auto scrollbar-hide" style={{ maxHeight: 'calc(90dvh - 4px)' }}>
+          <div className="px-5 py-4">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-4 pt-1">
@@ -482,12 +483,13 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
               ) : editId
                 ? 'CONFIRMAR CAMBIOS'
                 : form.type === 'gasto'
-                  ? `▲ REGISTRAR GASTO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
-                  : `▼ REGISTRAR INGRESO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  ? `▼ REGISTRAR GASTO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : form.type === 'liquidacion' ? `⇄ REGISTRAR LIQUIDACIÓN · ${amount > 0 ? fmtARS(amtARS) : '$0'}` : `▲ REGISTRAR INGRESO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
               }
             </button>
 
           </div>
+        </div>
         </div>
       </div>
     </>
