@@ -49,10 +49,15 @@ export default function PlantillasPage() {
     setDrawer(true)
   }
 
-  // Sort: favorites first, then alpha
+  // Sort: por negocio (FREEhouse → FREEwork → FREEproject) luego alfabético
+  const BIZ_ORDER: Record<string, number> = { 'FREEhouse': 0, 'FREEwork': 1, 'FREEproject': 2 }
   const sorted = [...templates].sort((a, b) => {
-    if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1
-    return a.name.localeCompare(b.name)
+    const bizA = (a.businesses as any)?.name ?? ''
+    const bizB = (b.businesses as any)?.name ?? ''
+    const orderA = BIZ_ORDER[bizA] ?? 99
+    const orderB = BIZ_ORDER[bizB] ?? 99
+    if (orderA !== orderB) return orderA - orderB
+    return a.name.localeCompare(b.name, 'es')
   })
 
   return (
