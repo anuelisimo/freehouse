@@ -366,10 +366,17 @@ function BulkModal({ templates, onClose, onSaved }: {
 
         // Una plantilla está "cargada" si existe un movimiento con ese template_id en ese período
         const loadedIds = new Set<string>()
+        const preAmounts: Record<string, string> = {}
         for (const m of movs) {
-          if (m.template_id) loadedIds.add(m.template_id)
+          if (m.template_id) {
+            loadedIds.add(m.template_id)
+            // Pre-llenar con el monto ya cargado
+            preAmounts[m.template_id] = String(m.amount)
+          }
         }
         setLoaded(loadedIds)
+        // Pre-llenar montos de los ya cargados
+        setAmounts(prev => ({ ...prev, ...preAmounts }))
         // Auto-skipear las que ya están cargadas
         setSkipped(loadedIds)
       } catch (e) {
