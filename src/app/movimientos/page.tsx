@@ -12,9 +12,10 @@ interface Filters {
   business_id: string
   type:        string
   paid_by:     string
+  search:      string
 }
 
-const EMPTY_FILTERS: Filters = { period: '', business_id: '', type: '', paid_by: '' }
+const EMPTY_FILTERS: Filters = { period: '', business_id: '', type: '', paid_by: '', search: '' }
 
 export default function MovimientosPage() {
   const [movs,       setMovs]    = useState<Movement[]>([])
@@ -226,6 +227,22 @@ export default function MovimientosPage() {
           </div>
         </div>
 
+        {/* Barra de búsqueda */}
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text3)' }}>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input className="ctrl pl-8" placeholder="Buscar por descripción…"
+            value={filters.search}
+            onChange={e => setFilter('search', e.target.value)} />
+          {filters.search && (
+            <button onClick={() => setFilter('search', '')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 lbl hover:opacity-70"
+              style={{ color: 'var(--text3)' }}>✕</button>
+          )}
+        </div>
+
         {/* Aviso filtros activos en export */}
         {hasFilters && (
           <div className="lbl px-1" style={{ color: 'var(--accent)' }}>
@@ -309,18 +326,26 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
           background: isLiquid ? 'rgba(0,229,255,0.08)' : isIncome ? 'rgba(0,255,136,0.08)' : 'rgba(255,51,85,0.08)',
           color:      isLiquid ? 'var(--cyan)' : isIncome ? 'var(--accent)' : 'var(--danger)',
         }}>
-        {isLiquid ? '⇄' : isIncome ? '▼' : '▲'}
+        {isLiquid ? '⇄' : isIncome ? '▲' : '▼'}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
           {m.description || cat?.name || '—'}
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>{biz?.name ?? '—'}</span>
           <span className="lbl">·</span>
           <span className="lbl" style={{ color: m.paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
             {m.paid_by === 'mau' ? 'MAU' : 'JUA'}
           </span>
+          {m.payment_method && m.payment_method !== 'efectivo' && (
+            <>
+              <span className="lbl">·</span>
+              <span className="lbl" style={{ color: 'var(--warn)' }}>
+                💳 {m.payment_method.replace('tarjeta_', '').toUpperCase()}
+              </span>
+            </>
+          )}
           <span className="lbl">·</span>
           <span className="lbl">{fmtDate(m.date)}</span>
         </div>

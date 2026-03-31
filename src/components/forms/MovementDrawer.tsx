@@ -16,13 +16,14 @@ interface F {
   paid_by: Partner; description: string
   affects_balance: boolean; split_override: boolean
   pct_mau: number; pct_juani: number
+  payment_method: string
 }
 
 const EMPTY: F = {
   type: 'gasto', amount: '', currency: 'ARS', date: todayISO(),
   business_id: '', category_id: '', paid_by: 'mau',
   description: '', affects_balance: true, split_override: false,
-  pct_mau: 50, pct_juani: 50,
+  pct_mau: 50, pct_juani: 50, payment_method: 'efectivo',
 }
 
 export default function MovementDrawer({ open, onClose, onSaved, editId, prefillTemplateId }: Props) {
@@ -64,6 +65,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
             split_override:  m.split_override,
             pct_mau:         Number(m.pct_mau),
             pct_juani:       Number(m.pct_juani),
+            payment_method:  m.payment_method ?? 'efectivo',
           })
           // Mostrar nombre en el campo concepto
           const tmplName = templates.find(t => t.id === m.template_id)?.name
@@ -195,8 +197,8 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
             <div className="grid grid-cols-3 gap-1.5 mb-4 p-1 rounded-sm"
               style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
               {([
-                { t: 'gasto',      label: '▲ GASTO',  bg: 'rgba(255,51,85,0.12)',   color: 'var(--danger)', border: 'rgba(255,51,85,0.3)',   glow: 'var(--glow-r)' },
-                { t: 'ingreso',    label: '▼ INGRESO', bg: 'rgba(0,255,136,0.1)',    color: 'var(--accent)', border: 'rgba(0,255,136,0.25)',  glow: 'var(--glow-g)' },
+                { t: 'gasto',      label: '▼ GASTO',  bg: 'rgba(255,51,85,0.12)',   color: 'var(--danger)', border: 'rgba(255,51,85,0.3)',   glow: 'var(--glow-r)' },
+                { t: 'ingreso',    label: '▲ INGRESO', bg: 'rgba(0,255,136,0.1)',    color: 'var(--accent)', border: 'rgba(0,255,136,0.25)',  glow: 'var(--glow-g)' },
                 { t: 'liquidacion',label: '⇄ LIQUID.', bg: 'rgba(0,229,255,0.1)',    color: 'var(--cyan)',   border: 'rgba(0,229,255,0.25)',  glow: 'var(--glow-c)' },
               ] as { t: MovType; label: string; bg: string; color: string; border: string; glow: string }[]).map(({ t, label, bg, color, border, glow }) => {
                 const active = form.type === t
@@ -334,6 +336,19 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   )
                 })}
               </div>
+            </div>
+
+            {/* ── Medio de pago ─── */}
+            <div className="mb-4">
+              <div className="lbl mb-1.5">MEDIO DE PAGO</div>
+              <select className="ctrl" value={form.payment_method}
+                onChange={e => set('payment_method', e.target.value)}>
+                <option value="efectivo">💵 Efectivo / Transferencia</option>
+                <option value="tarjeta_freehouse">💳 Tarjeta FREEhouse</option>
+                <option value="tarjeta_freework">💳 Tarjeta FREEwork</option>
+                <option value="tarjeta_freeproject">💳 Tarjeta FREEproject</option>
+                <option value="otro">Otro</option>
+              </select>
             </div>
 
             {/* ── Order summary / expand ─── */}

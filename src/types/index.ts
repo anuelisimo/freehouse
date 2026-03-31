@@ -1,5 +1,5 @@
 // ── Enums ────────────────────────────────────────────────────
-export type MovementType = 'ingreso' | 'gasto'
+export type MovementType = 'ingreso' | 'gasto' | 'liquidacion'
 export type Partner = 'mau' | 'juani'
 export type Currency = 'ARS' | 'USD' | 'EUR'
 
@@ -69,6 +69,7 @@ export interface Movement {
   pct_mau: number
   pct_juani: number
   template_id: string | null
+  payment_method: string | null
   created_at: string
   updated_at: string
   businesses?: Business
@@ -144,6 +145,7 @@ export interface MovementPayload {
   pct_mau: number
   pct_juani: number
   template_id?: string
+  payment_method?: string
 }
 
 export interface TemplatePayload {

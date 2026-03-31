@@ -19,6 +19,7 @@ const MovementSchema = z.object({
   pct_mau:         z.number().min(0).max(100).optional(),
   pct_juani:       z.number().min(0).max(100).optional(),
   template_id:     z.string().uuid().optional().nullable(),
+  payment_method:  z.string().max(50).optional().nullable(),
 }).refine(
   data => {
     // Si split_override = true, los porcentajes son obligatorios
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest) {
       split_override:  payload.split_override,
       pct_mau,
       pct_juani,
+      payment_method:  payload.payment_method ?? 'efectivo',
     })
     .select('*, businesses(id,name,color), categories(id,name), profiles(id,name)')
     .single()
