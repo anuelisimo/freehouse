@@ -336,21 +336,57 @@ function BulkModal({ templates, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const now   = new Date()
-  const [month,   setMonth]   = useState(String(now.getMonth() + 1).padStart(2, '0'))
-  const [year,    setYear]    = useState(String(now.getFullYear()))
-  const [amounts, setAmounts] = useState<Record<string, string>>({})
-  const [skipped, setSkipped] = useState<Set<string>>(new Set())
-  const [saving,  setSaving]  = useState(false)
-  const [done,    setDone]    = useState(0)
+  const [month,    setMonth]   = useState(String(now.getMonth() + 1).padStart(2, '0'))
+  const [year,     setYear]    = useState(String(now.getFullYear()))
+  const [amounts,  setAmounts] = useState<Record<string, string>>({})
+  const [skipped,  setSkipped] = useState<Set<string>>(new Set())
+  const [saving,   setSaving]  = useState(false)
+  const [done,     setDone]    = useState(0)
+  const [loaded,   setLoaded]  = useState<Set<string>>(new Set()) // plantillas ya cargadas ese mes
+  const [checking, setChecking] = useState(false)
 
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+  const BIZ_ORDER: Record<string, number> = { 'FREEhouse': 0, 'FREEwork': 1, 'FREEproject': 2 }
+  const sorted = [...templates].sort((a, b) => {
+    const orderA = BIZ_ORDER[(a.businesses as any)?.name ?? ''] ?? 99
+    const orderB = BIZ_ORDER[(b.businesses as any)?.name ?? ''] ?? 99
+    if (orderA !== orderB) return orderA - orderB
+    return a.name.localeCompare(b.name, 'es')
+  })
+
+  // Verificar qué plantillas ya tienen movimiento en el mes/año seleccionado
+  useEffect(() => {
+    async function checkLoaded() {
+      setChecking(true)
+      try {
+        const res  = await fetch(`/api/movements?period=${year}-${month}&limit=200`)
+        const json = await res.json()
+        const movs = json.data ?? []
+
+        // Una plantilla está "cargada" si existe un movimiento con ese template_id en ese período
+        const loadedIds = new Set<string>()
+        for (const m of movs) {
+          if (m.template_id) loadedIds.add(m.template_id)
+        }
+        setLoaded(loadedIds)
+        // Auto-skipear las que ya están cargadas
+        setSkipped(loadedIds)
+      } catch (e) {
+        // silently fail
+      } finally {
+        setChecking(false)
+      }
+    }
+    checkLoaded()
+  }, [month, year])
 
   function toggleSkip(id: string) {
     setSkipped(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
   async function saveAll() {
-    const toLoad = templates.filter(t => !skipped.has(t.id) && parseFloat(amounts[t.id] || '') > 0)
+    const toLoad = sorted.filter(t => !skipped.has(t.id) && parseFloat(amounts[t.id] || '') > 0)
     if (toLoad.length === 0) { alert('Ingresá al menos un monto'); return }
     setSaving(true)
     let count = 0
@@ -366,6 +402,7 @@ function BulkModal({ templates, onClose, onSaved }: {
           type:            t.type,
           business_id:     t.business_id,
           category_id:     t.category_id,
+          template_id:     t.id,
           paid_by:         t.default_paid_by,
           description:     t.description ?? t.name,
           affects_balance: true,
@@ -379,12 +416,17 @@ function BulkModal({ templates, onClose, onSaved }: {
     onSaved()
   }
 
+  const pendingCount = sorted.filter(t => !loaded.has(t.id)).length
+  const toLoadCount  = sorted.filter(t => !skipped.has(t.id) && parseFloat(amounts[t.id] || '') > 0).length
+
   return (
     <Overlay onClose={onClose} wide>
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-sm font-mono font-semibold uppercase">⚡ CARGAR MES</div>
-          <div className="lbl mt-0.5">Cargá varios gastos recurrentes de una vez</div>
+          <div className="lbl mt-0.5">
+            {checking ? 'Verificando…' : `${pendingCount} pendientes · ${loaded.size} ya cargadas`}
+          </div>
         </div>
       </div>
 
@@ -407,22 +449,17 @@ function BulkModal({ templates, onClose, onSaved }: {
 
       {/* Template rows */}
       <div className="space-y-2 mb-4">
-        {[...templates].sort((a, b) => {
-          const BIZ_ORDER: Record<string, number> = { 'FREEhouse': 0, 'FREEwork': 1, 'FREEproject': 2 }
-          const orderA = BIZ_ORDER[(a.businesses as any)?.name ?? ''] ?? 99
-          const orderB = BIZ_ORDER[(b.businesses as any)?.name ?? ''] ?? 99
-          if (orderA !== orderB) return orderA - orderB
-          return a.name.localeCompare(b.name, 'es')
-        }).map(t => {
-          const isSkipped = skipped.has(t.id)
+        {sorted.map(t => {
+          const isSkipped  = skipped.has(t.id)
+          const isLoaded   = loaded.has(t.id)
           const biz = (t.businesses as any)
           return (
             <div key={t.id}
               className="flex items-center gap-2.5 p-2.5 rounded-sm border transition-all"
               style={{
-                background: isSkipped ? 'var(--s2)' : 'var(--s3)',
-                borderColor: isSkipped ? 'var(--border)' : 'var(--border2)',
-                opacity: isSkipped ? 0.45 : 1,
+                background:  isLoaded ? 'var(--s2)' : isSkipped ? 'var(--s2)' : 'var(--s3)',
+                borderColor: isLoaded ? 'rgba(0,255,136,0.2)' : isSkipped ? 'var(--border)' : 'var(--border2)',
+                opacity:     isSkipped && !isLoaded ? 0.45 : 1,
               }}>
               {/* Skip toggle */}
               <input type="checkbox" checked={!isSkipped}
@@ -431,8 +468,16 @@ function BulkModal({ templates, onClose, onSaved }: {
 
               {/* Name + meta */}
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
-                  {t.name}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
+                    {t.name}
+                  </span>
+                  {isLoaded && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm flex-shrink-0"
+                      style={{ background: 'rgba(0,255,136,0.1)', color: 'var(--accent)', border: '1px solid rgba(0,255,136,0.2)' }}>
+                      ✓ YA CARGADA
+                    </span>
+                  )}
                 </div>
                 <div className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>
                   {biz?.name ?? '—'}
@@ -447,12 +492,13 @@ function BulkModal({ templates, onClose, onSaved }: {
               <input
                 type="number"
                 className="ctrl w-28 flex-shrink-0"
-                placeholder="Monto"
+                placeholder={isLoaded ? 'Ya cargada' : 'Monto'}
                 value={amounts[t.id] ?? ''}
                 disabled={isSkipped}
                 onChange={e => setAmounts(a => ({ ...a, [t.id]: e.target.value }))}
                 inputMode="decimal"
-                style={{ textAlign: 'right', fontFamily: 'monospace' }}
+                style={{ textAlign: 'right', fontFamily: 'monospace',
+                  opacity: isLoaded ? 0.5 : 1 }}
               />
             </div>
           )
@@ -462,7 +508,7 @@ function BulkModal({ templates, onClose, onSaved }: {
       {saving && (
         <div className="py-2 px-3 rounded-sm text-xs font-mono text-center mb-3"
           style={{ background: 'rgba(0,255,136,0.07)', color: 'var(--accent)', border: '1px solid rgba(0,255,136,0.2)' }}>
-          PROCESANDO {done} / {templates.filter(t => !skipped.has(t.id) && parseFloat(amounts[t.id] || '') > 0).length}…
+          PROCESANDO {done} / {toLoadCount}…
         </div>
       )}
 
