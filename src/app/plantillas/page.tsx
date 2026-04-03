@@ -342,7 +342,8 @@ function BulkModal({ templates, onClose, onSaved }: {
   const [skipped,  setSkipped] = useState<Set<string>>(new Set())
   const [saving,   setSaving]  = useState(false)
   const [done,     setDone]    = useState(0)
-  const [loaded,   setLoaded]  = useState<Set<string>>(new Set()) // plantillas ya cargadas ese mes
+  const [loaded,   setLoaded]  = useState<Set<string>>(new Set())
+  const [bulkSearch, setBulkSearch] = useState('') // plantillas ya cargadas ese mes
   const [checking, setChecking] = useState(false)
 
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -423,6 +424,10 @@ function BulkModal({ templates, onClose, onSaved }: {
     onSaved()
   }
 
+  const displaySorted = bulkSearch
+    ? sorted.filter(t => t.name.toLowerCase().includes(bulkSearch.toLowerCase()) ||
+        (t.businesses as any)?.name?.toLowerCase().includes(bulkSearch.toLowerCase()))
+    : sorted
   const pendingCount = sorted.filter(t => !loaded.has(t.id)).length
   const toLoadCount  = sorted.filter(t => !skipped.has(t.id) && parseFloat(amounts[t.id] || '') > 0).length
 

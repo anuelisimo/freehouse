@@ -51,6 +51,17 @@ export default function MovimientosPage() {
 
   useEffect(() => { load(filters, page) }, [filters, page, load])
 
+  // Filtro adicional client-side para negocio y categoría
+  const filteredMovs = filters.search
+    ? movs.filter(m => {
+        const q = filters.search.toLowerCase()
+        const desc = (m.description ?? '').toLowerCase()
+        const biz  = ((m.businesses as any)?.name ?? '').toLowerCase()
+        const cat  = ((m.categories as any)?.name ?? '').toLowerCase()
+        return desc.includes(q) || biz.includes(q) || cat.includes(q)
+      })
+    : movs
+
   function setFilter<K extends keyof Filters>(k: K, v: string) {
     setFilters(f => ({ ...f, [k]: v })); setPage(1)
   }
@@ -264,7 +275,7 @@ export default function MovimientosPage() {
           </div>
         ) : (
           <div className="card overflow-hidden">
-            {movs.map((m, i) => (
+            {filteredMovs.map((m, i) => (
               <MovRow key={m.id} m={m} last={i === movs.length - 1}
                 onEdit={() => openEdit(m.id)} onDelete={() => handleDelete(m.id)}
                 deleting={deleting === m.id} />
