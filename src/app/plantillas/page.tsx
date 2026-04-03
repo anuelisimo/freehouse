@@ -459,9 +459,24 @@ function BulkModal({ templates, onClose, onSaved }: {
         </div>
       </div>
 
+      {/* Búsqueda */}
+      <div className="relative mb-3">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text3)' }}>
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input className="ctrl pl-8" placeholder="Filtrar plantillas…"
+          value={bulkSearch} onChange={e => setBulkSearch(e.target.value)} />
+        {bulkSearch && (
+          <button onClick={() => setBulkSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 lbl"
+            style={{ color: 'var(--text3)' }}>✕</button>
+        )}
+      </div>
+
       {/* Template rows */}
       <div className="space-y-2 mb-4">
-        {sorted.map(t => {
+        {displaySorted.map(t => {
           const isSkipped  = skipped.has(t.id)
           const isLoaded   = loaded.has(t.id)
           const biz = (t.businesses as any)
