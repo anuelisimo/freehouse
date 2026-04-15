@@ -5,8 +5,6 @@ import type { Movement, Business } from '@/types'
 import { fmtARS, fmtDate, fmtPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
-interface Meta { total: number; pages: number }
-
 interface Filters {
   period:      string
   business_id: string
@@ -19,8 +17,7 @@ const EMPTY_FILTERS: Filters = { period: '', business_id: '', type: '', paid_by:
 
 export default function MovimientosPage() {
   const [movs,       setMovs]    = useState<Movement[]>([])
-  const [meta,       setMeta]    = useState<Meta>({ total: 0, pages: 1 })
-  const [page,       setPage]    = useState(1)
+  const [total,      setTotal]   = useState(0)
   const [loading,    setLoading] = useState(true)
   const [filters,    setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [periods,    setPeriods] = useState<string[]>([])
@@ -35,26 +32,29 @@ export default function MovimientosPage() {
     fetch('/api/dashboard').then(r => r.json()).then(j => setPeriods(j.data?.periods ?? []))
   }, [])
 
-  const load = useCallback(async (f: Filters, p: number) => {
+  const load = useCallback(async (f: Filters) => {
     setLoading(true)
-    const q = new URLSearchParams({ page: String(p), limit: '30' })
+    // Sin paginación — traer todos los movimientos del período/filtro
+    // Si hay búsqueda, ignorar límite y traer todo
+    const q = new URLSearchParams({ limit: '500' })
     if (f.period)      q.set('period',      f.period)
     if (f.business_id) q.set('business_id', f.business_id)
     if (f.type)        q.set('type',        f.type)
     if (f.paid_by)     q.set('paid_by',     f.paid_by)
+    if (f.search)      q.set('search',      f.search)
     const res  = await fetch(`/api/movements?${q}`)
     const json = await res.json()
     setMovs(json.data ?? [])
-    setMeta(json.meta ?? { total: 0, pages: 1 })
+    setTotal(json.meta?.total ?? 0)
     setLoading(false)
   }, [])
 
-  useEffect(() => { load(filters, page) }, [filters, page, load])
+  useEffect(() => { load(filters) }, [filters, load])
 
-  // Filtro adicional client-side para negocio y categoría
+  // Filtro client-side adicional para negocio y categoría (complementa búsqueda API)
   const filteredMovs = filters.search
     ? movs.filter(m => {
-        const q = filters.search.toLowerCase()
+        const q   = filters.search.toLowerCase()
         const desc = (m.description ?? '').toLowerCase()
         const biz  = ((m.businesses as any)?.name ?? '').toLowerCase()
         const cat  = ((m.categories as any)?.name ?? '').toLowerCase()
@@ -63,9 +63,9 @@ export default function MovimientosPage() {
     : movs
 
   function setFilter<K extends keyof Filters>(k: K, v: string) {
-    setFilters(f => ({ ...f, [k]: v })); setPage(1)
+    setFilters(f => ({ ...f, [k]: v }))
   }
-  function clearFilters() { setFilters(EMPTY_FILTERS); setPage(1) }
+  function clearFilters() { setFilters(EMPTY_FILTERS) }
   function openEdit(id: string) { setEditId(id); setDrawer(true) }
   function openNew()            { setEditId(null); setDrawer(true) }
 
@@ -74,102 +74,61 @@ export default function MovimientosPage() {
     setDel(id)
     await fetch(`/api/movements/${id}`, { method: 'DELETE' })
     setDel(null)
-    load(filters, page)
+    load(filters)
   }
 
-  // ── EXPORTAR A EXCEL (CSV con BOM para que Excel lo abra bien) ──
   async function handleExport() {
     setExport(true)
     try {
-      // Traer TODOS los movimientos con los filtros activos (sin paginación)
       const q = new URLSearchParams({ limit: '2000' })
       if (filters.period)      q.set('period',      filters.period)
       if (filters.business_id) q.set('business_id', filters.business_id)
       if (filters.type)        q.set('type',        filters.type)
       if (filters.paid_by)     q.set('paid_by',     filters.paid_by)
+      if (filters.search)      q.set('search',      filters.search)
 
       const res  = await fetch(`/api/movements?${q}`)
       const json = await res.json()
       const data: Movement[] = json.data ?? []
 
-      if (data.length === 0) {
-        alert('No hay movimientos para exportar')
-        setExport(false)
-        return
-      }
+      if (data.length === 0) { alert('No hay movimientos para exportar'); setExport(false); return }
 
-      // Construir CSV
-      const headers = [
-        'Fecha',
-        'Tipo',
-        'Negocio',
-        'Categoría',
-        'Descripción',
-        'Moneda',
-        'Monto',
-        'Monto ARS',
-        'Tipo de cambio',
-        'Pagado por',
-        'Registrado por',
-        '% Mau',
-        '% Juani',
-        'Corresponde Mau (ARS)',
-        'Corresponde Juani (ARS)',
-        'Afecta balance',
-      ]
-
+      const headers = ['Fecha','Tipo','Negocio','Categoría','Descripción','Moneda','Monto','Monto ARS','Tipo de cambio','Pagado por','Registrado por','% Mau','% Juani','Corresponde Mau (ARS)','Corresponde Juani (ARS)','Afecta balance']
       const rows = data.map(m => {
         const amtARS   = Number(m.amount_ars)
         const mauAmt   = amtARS * (Number(m.pct_mau)   / 100)
         const juaniAmt = amtARS * (Number(m.pct_juani) / 100)
-        const biz = (m.businesses as any)?.name ?? ''
-        const cat = (m.categories as any)?.name ?? ''
-        const creator = (m.profiles as any)?.name ?? ''
-
         return [
-          m.date,
-          m.type,
-          biz,
-          cat,
+          m.date, m.type,
+          (m.businesses as any)?.name ?? '',
+          (m.categories as any)?.name ?? '',
           m.description ?? '',
           m.currency,
           String(m.amount).replace('.', ','),
           String(amtARS.toFixed(2)).replace('.', ','),
           String(m.exchange_rate).replace('.', ','),
           m.paid_by === 'mau' ? 'Mau' : 'Juani',
-          creator,
-          String(m.pct_mau),
-          String(m.pct_juani),
+          (m.profiles as any)?.name ?? '',
+          String(m.pct_mau), String(m.pct_juani),
           String(mauAmt.toFixed(2)).replace('.', ','),
           String(juaniAmt.toFixed(2)).replace('.', ','),
           m.affects_balance ? 'Sí' : 'No',
         ]
       })
 
-      // CSV con separador ; (estándar europeo/argentino para Excel)
+      const bom = '\uFEFF'
       const csvContent = [headers, ...rows]
         .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
         .join('\n')
-
-      // BOM UTF-8 para que Excel muestre bien los acentos
-      const bom = '\uFEFF'
       const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
-
-      // Nombre del archivo con fecha y filtros aplicados
       const dateStr = new Date().toISOString().slice(0, 10)
       const suffix  = filters.period ? `_${fmtPeriod(filters.period).replace(' ', '-')}` : ''
-      a.href     = url
-      a.download = `freehouse_movimientos${suffix}_${dateStr}.csv`
-      a.click()
+      a.href = url; a.download = `freehouse_movimientos${suffix}_${dateStr}.csv`; a.click()
       URL.revokeObjectURL(url)
-
-    } catch (e) {
-      alert('Error al exportar')
-    } finally {
-      setExport(false)
-    }
+    } catch (e) { alert('Error al exportar') }
+    finally { setExport(false) }
   }
 
   const hasFilters = Object.values(filters).some(Boolean)
@@ -182,17 +141,14 @@ export default function MovimientosPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-mono font-semibold uppercase tracking-wide">Operaciones</div>
-            <div className="lbl mt-0.5">{loading ? '…' : `${meta.total} registros`}</div>
+            <div className="lbl mt-0.5">
+              {loading ? '…' : `${filteredMovs.length}${total > filteredMovs.length ? ` de ${total}` : ''} registros`}
+            </div>
           </div>
           <div className="flex gap-2">
-            {/* Botón exportar */}
-            <button
-              onClick={handleExport}
-              disabled={exporting}
+            <button onClick={handleExport} disabled={exporting}
               className="btn-ghost text-xs px-3 py-2 flex items-center gap-1.5"
-              style={{ opacity: exporting ? 0.6 : 1 }}
-              title="Exportar a Excel"
-            >
+              style={{ opacity: exporting ? 0.6 : 1 }} title="Exportar a Excel">
               {exporting ? (
                 <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -224,8 +180,8 @@ export default function MovimientosPage() {
           <div className="flex gap-2">
             <select className="ctrl flex-1" value={filters.type} onChange={e => setFilter('type', e.target.value)}>
               <option value="">Tipo</option>
-              <option value="gasto">▲ Gastos</option>
-              <option value="ingreso">▼ Ingresos</option>
+              <option value="gasto">▼ Gastos</option>
+              <option value="ingreso">▲ Ingresos</option>
             </select>
             <select className="ctrl flex-1" value={filters.paid_by} onChange={e => setFilter('paid_by', e.target.value)}>
               <option value="">Por quien</option>
@@ -244,22 +200,14 @@ export default function MovimientosPage() {
             stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text3)' }}>
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
-          <input className="ctrl pl-8" placeholder="Buscar por descripción…"
-            value={filters.search}
-            onChange={e => setFilter('search', e.target.value)} />
+          <input className="ctrl pl-8" placeholder="Buscar en descripción, negocio o categoría…"
+            value={filters.search} onChange={e => setFilter('search', e.target.value)} />
           {filters.search && (
             <button onClick={() => setFilter('search', '')}
               className="absolute right-3 top-1/2 -translate-y-1/2 lbl hover:opacity-70"
               style={{ color: 'var(--text3)' }}>✕</button>
           )}
         </div>
-
-        {/* Aviso filtros activos en export */}
-        {hasFilters && (
-          <div className="lbl px-1" style={{ color: 'var(--accent)' }}>
-            ↓ El export descargará solo los movimientos filtrados
-          </div>
-        )}
 
         {/* ── LIST ────────────────────────────────────── */}
         {loading ? (
@@ -268,33 +216,18 @@ export default function MovimientosPage() {
               <div key={i} className="card h-16 animate-pulse" style={{ background: 'var(--s2)' }} />
             ))}
           </div>
-        ) : movs.length === 0 ? (
+        ) : filteredMovs.length === 0 ? (
           <div className="card p-10 text-center">
-            <div className="lbl mb-2">SIN OPERACIONES</div>
-            <button onClick={openNew} className="btn-primary text-xs mt-2">+ CARGAR PRIMERA</button>
+            <div className="lbl mb-2">{filters.search ? 'SIN RESULTADOS' : 'SIN OPERACIONES'}</div>
+            {!filters.search && <button onClick={openNew} className="btn-primary text-xs mt-2">+ CARGAR PRIMERA</button>}
           </div>
         ) : (
           <div className="card overflow-hidden">
             {filteredMovs.map((m, i) => (
-              <MovRow key={m.id} m={m} last={i === movs.length - 1}
+              <MovRow key={m.id} m={m} last={i === filteredMovs.length - 1}
                 onEdit={() => openEdit(m.id)} onDelete={() => handleDelete(m.id)}
                 deleting={deleting === m.id} />
             ))}
-          </div>
-        )}
-
-        {/* ── PAGINATION ──────────────────────────────── */}
-        {meta.pages > 1 && (
-          <div className="flex items-center justify-center gap-3">
-            <button className="btn-ghost text-xs px-3 py-1.5" disabled={page <= 1}
-              onClick={() => setPage(p => p - 1)} style={{ opacity: page <= 1 ? 0.3 : 1 }}>
-              ← PREV
-            </button>
-            <span className="lbl">{page} / {meta.pages}</span>
-            <button className="btn-ghost text-xs px-3 py-1.5" disabled={page >= meta.pages}
-              onClick={() => setPage(p => p + 1)} style={{ opacity: page >= meta.pages ? 0.3 : 1 }}>
-              NEXT →
-            </button>
           </div>
         )}
 
@@ -313,7 +246,7 @@ export default function MovimientosPage() {
       <MovementDrawer
         open={drawer} editId={editId}
         onClose={() => { setDrawer(false); setEditId(null) }}
-        onSaved={() => { setDrawer(false); setEditId(null); load(filters, page) }}
+        onSaved={() => { setDrawer(false); setEditId(null); load(filters) }}
       />
     </div>
   )
@@ -349,11 +282,11 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
           <span className="lbl" style={{ color: m.paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
             {m.paid_by === 'mau' ? 'MAU' : 'JUA'}
           </span>
-          {m.payment_method && m.payment_method !== 'efectivo' && (
+          {(m as any).payment_method && (m as any).payment_method !== 'efectivo' && (
             <>
               <span className="lbl">·</span>
               <span className="lbl" style={{ color: 'var(--warn)' }}>
-                💳 {m.payment_method.replace('tarjeta_', '').toUpperCase()}
+                💳 {(m as any).payment_method.replace('tarjeta_', '').toUpperCase()}
               </span>
             </>
           )}
@@ -364,7 +297,7 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
       <div className="text-right flex-shrink-0 mr-1">
         <div className={`num text-sm font-semibold ${isLiquid ? '' : isIncome ? 'num-pos' : 'num-neg'}`}
           style={isLiquid ? { color: 'var(--cyan)' } : {}}>
-          {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
+          {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtARS(m.amount_ars)}
         </div>
         {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>
