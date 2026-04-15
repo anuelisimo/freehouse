@@ -1,9 +1,4 @@
 export function fmtARS(n: number, compact = false): string {
-  const abs = Math.abs(n)
-  if (compact && abs >= 1_000_000)
-    return `$${(n / 1_000_000).toFixed(1)}M`
-  if (compact && abs >= 1_000)
-    return `$${Math.round(n / 1_000)}K`
   return new Intl.NumberFormat('es-AR', {
     style: 'currency', currency: 'ARS',
     minimumFractionDigits: 0, maximumFractionDigits: 0,
