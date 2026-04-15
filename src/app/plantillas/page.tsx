@@ -343,7 +343,8 @@ function BulkModal({ templates, onClose, onSaved }: {
   const [saving,   setSaving]  = useState(false)
   const [done,     setDone]    = useState(0)
   const [loaded,   setLoaded]  = useState<Set<string>>(new Set())
-  const [bulkSearch, setBulkSearch] = useState('') // plantillas ya cargadas ese mes
+  const [bulkSearch, setBulkSearch] = useState('')
+  const [paidByOverride, setPaidBy] = useState<Record<string, string>>({}) // plantillas ya cargadas ese mes
   const [checking, setChecking] = useState(false)
 
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -411,7 +412,7 @@ function BulkModal({ templates, onClose, onSaved }: {
           business_id:     t.business_id,
           category_id:     t.category_id,
           template_id:     t.id,
-          paid_by:         t.default_paid_by,
+          paid_by:         paidByOverride[t.id] ?? t.default_paid_by,
           description:     t.description ?? t.name,
           affects_balance: true,
           split_override:  false,
@@ -495,7 +496,7 @@ function BulkModal({ templates, onClose, onSaved }: {
 
               {/* Name + meta */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>
                     {t.name}
                   </span>
@@ -506,12 +507,28 @@ function BulkModal({ templates, onClose, onSaved }: {
                     </span>
                   )}
                 </div>
-                <div className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>
-                  {biz?.name ?? '—'}
-                  {' · '}
-                  <span style={{ color: t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
-                    {t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
-                  </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>{biz?.name ?? '—'}</span>
+                  <span className="lbl">·</span>
+                  {/* Toggle MAU / JUA */}
+                  {(['mau','juani'] as const).map(p => {
+                    const current = paidByOverride[t.id] ?? t.default_paid_by
+                    const active  = current === p
+                    const col     = p === 'mau' ? 'var(--mau)' : 'var(--juani)'
+                    const rgb     = p === 'mau' ? '0,255,136' : '0,229,255'
+                    return (
+                      <button key={p} disabled={isSkipped}
+                        onClick={() => setPaidBy(prev => ({ ...prev, [t.id]: p }))}
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm transition-all"
+                        style={{
+                          background: active ? `rgba(${rgb},0.12)` : 'transparent',
+                          color:      active ? col : 'var(--text3)',
+                          border:     `1px solid ${active ? col : 'var(--border)'}`,
+                        }}>
+                        {p === 'mau' ? 'MAU' : 'JUA'}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
