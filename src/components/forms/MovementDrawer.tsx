@@ -8,7 +8,7 @@ import { todayISO, fmtARS } from '@/lib/fmt'
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; editId?: string | null; prefillTemplateId?: string | null }
 type MovType = 'gasto' | 'ingreso' | 'liquidacion'
-type Partner = 'mau' | 'juani'
+type Partner = 'mau' | 'juani' | 'ambos'
 
 interface F {
   type: MovType | ''; amount: string; currency: 'ARS' | 'USD'
@@ -26,7 +26,6 @@ const EMPTY: F = {
   pct_mau: 50, pct_juani: 50, payment_method: '',
 }
 
-// Errores por campo
 interface FieldErrors {
   type?: string; amount?: string; paid_by?: string
   business_id?: string; category_id?: string; payment_method?: string
@@ -42,6 +41,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   const [query, setQuery]     = useState('')
   const [showSugg, setShowSugg] = useState(false)
   const amtRef = useRef<HTMLInputElement>(null)
+
+  // "AMBOS" solo aplica cuando tipo es ingreso
+  const isAmbos = form.paid_by === 'ambos'
 
   useEffect(() => {
     fetch('/api/templates').then(r => r.json()).then(j => setTmpl(j.data ?? []))
@@ -72,13 +74,12 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     }
   }, [open, editId])
 
-  // Auto-apply template from Plantillas page
   useEffect(() => {
     if (open && prefillTemplateId && templates.length) {
       const t = templates.find(x => x.id === prefillTemplateId)
       if (t) {
         setF(f => ({ ...f, type: t.type as MovType, business_id: t.business_id,
-          category_id: t.category_id, paid_by: t.default_paid_by,
+          category_id: t.category_id, paid_by: t.default_paid_by as Partner,
           description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo' }))
         setQuery(t.name)
         setTimeout(() => amtRef.current?.focus(), 150)
@@ -86,7 +87,6 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     }
   }, [open, prefillTemplateId, templates])
 
-  // Auto-resolve split rule when biz/cat changes
   useEffect(() => {
     if (!form.split_override && form.business_id && form.category_id && rules.length) {
       const r = resolveRule(form.business_id, form.category_id, rules)
@@ -100,7 +100,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
 
   function applyTmpl(t: Template) {
     setF(f => ({ ...f, type: t.type as MovType, business_id: t.business_id,
-      category_id: t.category_id, paid_by: t.default_paid_by,
+      category_id: t.category_id, paid_by: t.default_paid_by as Partner,
       description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo' }))
     setQuery(t.name); setShowSugg(false)
     setTimeout(() => amtRef.current?.focus(), 50)
@@ -109,11 +109,25 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   function set<K extends keyof F>(k: K, v: F[K]) {
     setF(f => {
       const next = { ...f, [k]: v }
-      if (k === 'paid_by' && f.type === 'liquidacion') {
-        next.pct_mau   = v === 'mau' ? 0 : 100
-        next.pct_juani = v === 'mau' ? 100 : 0
+      if (k === 'paid_by') {
+        if (v === 'ambos') {
+          // AMBOS: split 50/50, no afecta balance, bloqueado
+          next.split_override  = true
+          next.pct_mau         = 50
+          next.pct_juani       = 50
+          next.affects_balance = false
+        } else if (f.paid_by === 'ambos') {
+          // Si venía de AMBOS, resetear affects_balance
+          next.affects_balance = true
+          next.split_override  = false
+        }
+        if (v === 'mau' && f.type === 'liquidacion') {
+          next.pct_mau = 0; next.pct_juani = 100
+        }
+        if (v === 'juani' && f.type === 'liquidacion') {
+          next.pct_mau = 100; next.pct_juani = 0
+        }
       }
-      // Auto-set category when business changes
       if (k === 'business_id') next.category_id = ''
       return next
     })
@@ -123,12 +137,12 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   const amount   = parseFloat(form.amount) || 0
   const rate     = form.currency === 'USD' ? (exchangeRates['USD'] ?? 1) : 1
   const amtARS   = amount * rate
-  const mauAmt   = amtARS * form.pct_mau   / 100
-  const juaniAmt = amtARS * form.pct_juani / 100
+  // Para AMBOS, cada uno recibe la mitad
+  const mauAmt   = isAmbos ? amtARS / 2 : amtARS * form.pct_mau   / 100
+  const juaniAmt = isAmbos ? amtARS / 2 : amtARS * form.pct_juani / 100
   const bizName  = businesses.find(b => b.id === form.business_id)?.name ?? '—'
   const catName  = categories.find(c => c.id === form.category_id)?.name ?? '—'
 
-  // Computed: qué campos están habilitados
   const isEdit     = !!editId
   const hasType    = isEdit || !!form.type
   const hasAmount  = isEdit || (hasType && amount > 0)
@@ -139,12 +153,12 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
 
   function validate(): boolean {
     const errors: FieldErrors = {}
-    if (!form.type)           errors.type         = 'Seleccioná un tipo'
-    if (!amount || amount<=0) errors.amount        = 'Ingresá un monto'
-    if (!form.paid_by)        errors.paid_by       = 'Seleccioná quién pagó'
-    if (!form.payment_method) errors.payment_method= 'Seleccioná el medio de pago'
-    if (!form.business_id)    errors.business_id   = 'Seleccioná un negocio'
-    if (!form.category_id)    errors.category_id   = 'Seleccioná una categoría'
+    if (!form.type)           errors.type          = 'Seleccioná un tipo'
+    if (!amount || amount<=0) errors.amount         = 'Ingresá un monto'
+    if (!form.paid_by)        errors.paid_by        = 'Seleccioná quién cobró'
+    if (!form.payment_method) errors.payment_method = 'Seleccioná el medio de pago'
+    if (!form.business_id)    errors.business_id    = 'Seleccioná un negocio'
+    if (!form.category_id)    errors.category_id    = 'Seleccioná una categoría'
     setFE(errors)
     return Object.keys(errors).length === 0
   }
@@ -153,25 +167,47 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     if (!validate()) return
     setSaving(true)
     try {
-      const res = await fetch(editId ? `/api/movements/${editId}` : '/api/movements', {
-        method:  editId ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ ...form, amount, exchange_rate: rate }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error?.message ?? json.error ?? 'Error')
+      if (isAmbos) {
+        // Crear DOS movimientos: uno para Mau (100/0) y uno para Juani (0/100)
+        const half = amount / 2
+        const base = {
+          currency: form.currency, exchange_rate: rate,
+          type: form.type, business_id: form.business_id,
+          category_id: form.category_id, date: form.date,
+          description: form.description || query || undefined,
+          affects_balance: false, split_override: true,
+          payment_method: form.payment_method,
+        }
+        await Promise.all([
+          fetch('/api/movements', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...base, amount: half, paid_by: 'mau', pct_mau: 100, pct_juani: 0 }),
+          }),
+          fetch('/api/movements', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...base, amount: half, paid_by: 'juani', pct_mau: 0, pct_juani: 100 }),
+          }),
+        ])
+      } else {
+        const res = await fetch(editId ? `/api/movements/${editId}` : '/api/movements', {
+          method:  editId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ ...form, amount, exchange_rate: rate }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error?.message ?? json.error ?? 'Error')
+      }
       onSaved()
     } catch (e: any) { setFE({ type: e.message }) }
     finally { setSaving(false) }
   }
 
-  // Helper para estilo de campo con error
   function fieldStyle(hasError?: string, disabled?: boolean): React.CSSProperties {
     return {
-      opacity:     disabled ? 0.35 : 1,
+      opacity:       disabled ? 0.35 : 1,
       pointerEvents: disabled ? 'none' : 'auto',
-      borderColor: hasError ? 'var(--danger)' : undefined,
-      boxShadow:   hasError ? '0 0 0 2px rgba(255,51,85,0.15)' : undefined,
+      borderColor:   hasError ? 'var(--danger)' : undefined,
+      boxShadow:     hasError ? '0 0 0 2px rgba(255,51,85,0.15)' : undefined,
     }
   }
 
@@ -179,12 +215,10 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-40 animate-fade-in"
         style={{ background: 'rgba(7,9,13,0.85)', backdropFilter: 'blur(6px)' }}
         onClick={onClose} />
 
-      {/* Modal centrado */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
         <div className="w-full animate-fade-up rounded-sm overflow-hidden"
           style={{
@@ -233,6 +267,10 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                             pct_juani: f.paid_by === 'mau' ? 100 : 0,
                             affects_balance: true }))
                         }
+                        // Si cambia a gasto, resetear AMBOS
+                        if (t !== 'ingreso' && form.paid_by === 'ambos') {
+                          setF(f => ({ ...f, type: t, paid_by: '', affects_balance: true, split_override: false }))
+                        }
                       }}
                         className="py-2.5 rounded-sm text-xs font-mono font-bold uppercase tracking-wider transition-all"
                         style={{
@@ -263,7 +301,6 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
 
               {/* ── 2. CONCEPTO + MONTO ─── */}
               <div style={fieldStyle(undefined, !hasType)}>
-                {/* Concepto */}
                 <div className="mb-4 relative">
                   <div className="lbl mb-1.5">CONCEPTO / PLANTILLA <span style={{ color: 'var(--text3)' }}>(opcional)</span></div>
                   <input className="ctrl" placeholder="Buscar plantilla o ingresar concepto…"
@@ -298,10 +335,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   )}
                 </div>
 
-                {/* Monto */}
                 <div className="mb-4">
                   <div className="lbl mb-1.5">
-                    MONTO
+                    MONTO {isAmbos && <span style={{ color: 'var(--text3)' }}>(total — se divide en 2)</span>}
                     {fieldErrors.amount && <span className="ml-2 text-[10px] font-mono" style={{ color: 'var(--danger)' }}>← {fieldErrors.amount}</span>}
                   </div>
                   <div className="flex gap-2">
@@ -318,42 +354,75 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   {form.currency === 'USD' && amount > 0 && (
                     <div className="lbl mt-1.5">≈ {fmtARS(amtARS)} · TC {fmtARS(exchangeRates['USD'] ?? 0)}</div>
                   )}
+                  {/* Preview cobro compartido */}
+                  {isAmbos && amount > 0 && (
+                    <div className="mt-2 p-2 rounded-sm flex justify-between"
+                      style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
+                      <span className="num text-xs" style={{ color: 'var(--mau)' }}>MAU cobra {fmtARS(mauAmt)}</span>
+                      <span className="num text-xs" style={{ color: 'var(--juani)' }}>JUANI cobra {fmtARS(juaniAmt)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* ── 3. REALIZADO POR ─── */}
               <div className="mb-4" style={fieldStyle(fieldErrors.paid_by, !hasAmount)}>
                 <div className="lbl mb-1.5">
-                  REALIZADO POR
+                  {form.type === 'ingreso' ? 'COBRADO POR' : 'PAGADO POR'}
                   {fieldErrors.paid_by && <span className="ml-2 text-[10px] font-mono" style={{ color: 'var(--danger)' }}>← {fieldErrors.paid_by}</span>}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['mau', 'juani'] as Partner[]).map(p => {
+                {/* MAU + JUANI siempre visibles, AMBOS solo para ingresos */}
+                <div className={`grid gap-2 ${form.type === 'ingreso' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {(['mau', 'juani', ...(form.type === 'ingreso' ? ['ambos'] : [])] as Partner[]).map(p => {
                     const active = form.paid_by === p
-                    const col  = p === 'mau' ? 'var(--mau)' : 'var(--juani)'
-                    const rgb  = p === 'mau' ? '0,255,136' : '0,229,255'
+                    const isAmboBtn = p === 'ambos'
+                    const col  = isAmboBtn ? '#a78bfa' : p === 'mau' ? 'var(--mau)' : 'var(--juani)'
+                    const rgb  = isAmboBtn ? '167,139,250' : p === 'mau' ? '0,255,136' : '0,229,255'
                     return (
                       <button key={p} onClick={() => set('paid_by', p)}
-                        className="flex items-center gap-2.5 p-3 rounded-sm border transition-all"
+                        className="flex items-center gap-2 p-3 rounded-sm border transition-all justify-center"
                         style={{
                           background:  active ? `rgba(${rgb},0.07)` : 'var(--s2)',
                           borderColor: active ? col : fieldErrors.paid_by ? 'var(--danger)' : 'var(--border)',
                           boxShadow:   active ? `0 0 12px rgba(${rgb},0.12)` : 'none',
+                          flexDirection: isAmboBtn ? 'column' : 'row',
                         }}>
-                        <div className="w-7 h-7 rounded-sm flex items-center justify-center text-[10px] font-bold"
-                          style={{ background: `rgba(${rgb},0.12)`, color: col, fontFamily: 'monospace' }}>
-                          {p === 'mau' ? 'MA' : 'JU'}
-                        </div>
-                        <div className="text-left">
-                          <div className="text-xs font-mono font-medium" style={{ color: active ? col : 'var(--text)' }}>
-                            {p === 'mau' ? 'MAU' : 'JUANI'}
-                          </div>
-                          <div className="lbl" style={{ color: 'var(--text3)' }}>PARTNER</div>
-                        </div>
+                        {isAmboBtn ? (
+                          <>
+                            <div className="text-xs font-mono font-bold" style={{ color: active ? col : 'var(--text3)' }}>AMBOS</div>
+                            <div className="lbl" style={{ color: 'var(--text3)', fontSize: '0.55rem' }}>50 / 50</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-7 h-7 rounded-sm flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                              style={{ background: `rgba(${rgb},0.12)`, color: col, fontFamily: 'monospace' }}>
+                              {p === 'mau' ? 'MA' : 'JU'}
+                            </div>
+                            <div className="text-left">
+                              <div className="text-xs font-mono font-medium" style={{ color: active ? col : 'var(--text)' }}>
+                                {p === 'mau' ? 'MAU' : 'JUANI'}
+                              </div>
+                              <div className="lbl" style={{ color: 'var(--text3)' }}>PARTNER</div>
+                            </div>
+                          </>
+                        )}
                       </button>
                     )
                   })}
                 </div>
+
+                {/* Info AMBOS */}
+                {isAmbos && (
+                  <div className="mt-2 p-2.5 rounded-sm" style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)' }}>
+                    <div className="text-xs font-mono" style={{ color: '#a78bfa' }}>⚡ COBRO COMPARTIDO</div>
+                    <div className="lbl mt-1" style={{ color: 'var(--text2)' }}>
+                      Se crearán 2 movimientos automáticamente — uno por cada socio por el 50% del monto total.
+                    </div>
+                    <div className="lbl mt-1" style={{ color: 'var(--text3)' }}>
+                      No afecta el balance de deuda entre socios.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── 4. MEDIO DE PAGO ─── */}
@@ -414,33 +483,33 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   <div className="lbl mb-1">{bizName} · {catName}</div>
                   <div className="flex items-center gap-3">
                     <span className="num text-xs" style={{ color: 'var(--mau)' }}>
-                      M {form.pct_mau}% = {fmtARS(mauAmt, true)}
+                      M {isAmbos ? '50' : form.pct_mau}% = {fmtARS(mauAmt)}
                     </span>
                     <span className="lbl">|</span>
                     <span className="num text-xs" style={{ color: 'var(--juani)' }}>
-                      J {form.pct_juani}% = {fmtARS(juaniAmt, true)}
+                      J {isAmbos ? '50' : form.pct_juani}% = {fmtARS(juaniAmt)}
                     </span>
                   </div>
                 </div>
-                <button onClick={() => setAdv(a => !a)}
-                  className="lbl px-2.5 py-1.5 rounded-sm transition-all hover:opacity-80"
-                  style={{ border: '1px solid var(--border2)', color: advanced ? 'var(--accent)' : 'var(--text3)' }}>
-                  {advanced ? 'CERRAR' : 'DETALLES ›'}
-                </button>
+                {!isAmbos && (
+                  <button onClick={() => setAdv(a => !a)}
+                    className="lbl px-2.5 py-1.5 rounded-sm transition-all hover:opacity-80"
+                    style={{ border: '1px solid var(--border2)', color: advanced ? 'var(--accent)' : 'var(--text3)' }}>
+                    {advanced ? 'CERRAR' : 'DETALLES ›'}
+                  </button>
+                )}
               </div>
 
-              {advanced && (
+              {advanced && !isAmbos && (
                 <div className="mb-4 space-y-3 p-3 rounded-sm"
                   style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
 
-                  {/* Descripción */}
                   <div>
                     <div className="lbl mb-1.5">DESCRIPCIÓN</div>
                     <input className="ctrl" placeholder="Opcional…" value={form.description}
                       onChange={e => set('description', e.target.value)} />
                   </div>
 
-                  {/* Split */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="lbl">REPARTO</div>
@@ -475,21 +544,33 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                     )}
                   </div>
 
-                  {/* Afecta balance */}
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  {/* Afecta balance — bloqueado si es AMBOS */}
+                  <label className="flex items-center gap-2 cursor-pointer" style={{ opacity: isAmbos ? 0.5 : 1 }}>
                     <input type="checkbox" checked={form.affects_balance}
-                      onChange={e => set('affects_balance', e.target.checked)}
+                      onChange={e => !isAmbos && set('affects_balance', e.target.checked)}
+                      disabled={isAmbos}
                       style={{ accentColor: 'var(--accent)' }} />
                     <div>
-                      <div className="text-xs font-mono font-medium" style={{ color: 'var(--text)' }}>AFECTA BALANCE</div>
+                      <div className="text-xs font-mono font-medium" style={{ color: 'var(--text)' }}>
+                        AFECTA BALANCE {isAmbos && <span style={{ color: '#a78bfa' }}>(bloqueado — cobro compartido)</span>}
+                      </div>
                       <div className="lbl" style={{ color: 'var(--text3)' }}>Desactivar para excluir del cálculo de deuda</div>
                     </div>
                   </label>
                 </div>
               )}
 
+              {/* Descripción visible para AMBOS */}
+              {isAmbos && (
+                <div className="mb-4 p-3 rounded-sm" style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
+                  <div className="lbl mb-1.5">DESCRIPCIÓN</div>
+                  <input className="ctrl" placeholder="Opcional…" value={form.description}
+                    onChange={e => set('description', e.target.value)} />
+                </div>
+              )}
+
               {/* Error general */}
-              {fieldErrors.type && !['Seleccioná un tipo','Ingresá un monto','Seleccioná quién pagó','Seleccioná el medio de pago','Seleccioná un negocio','Seleccioná una categoría'].includes(fieldErrors.type) && (
+              {fieldErrors.type && !['Seleccioná un tipo','Ingresá un monto','Seleccioná quién cobró','Seleccioná el medio de pago','Seleccioná un negocio','Seleccioná una categoría'].includes(fieldErrors.type) && (
                 <div className="py-2 px-3 rounded-sm text-xs font-mono text-center mb-3"
                   style={{ background: 'rgba(255,51,85,0.07)', color: 'var(--danger)', border: '1px solid rgba(255,51,85,0.18)' }}>
                   ⚠ {fieldErrors.type}
@@ -507,9 +588,10 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                     PROCESANDO…
                   </span>
                 ) : editId ? 'CONFIRMAR CAMBIOS'
-                  : form.type === 'gasto'       ? `▼ REGISTRAR GASTO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
-                  : form.type === 'liquidacion' ? `⇄ REGISTRAR LIQUIDACIÓN · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
-                  : form.type === 'ingreso'     ? `▲ REGISTRAR INGRESO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : isAmbos                      ? `⚡ REGISTRAR COBRO COMPARTIDO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : form.type === 'gasto'        ? `▼ REGISTRAR GASTO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : form.type === 'liquidacion'  ? `⇄ REGISTRAR LIQUIDACIÓN · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : form.type === 'ingreso'      ? `▲ REGISTRAR INGRESO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
                   : 'REGISTRAR'}
               </button>
 
