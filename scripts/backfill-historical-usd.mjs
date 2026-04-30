@@ -7,60 +7,13 @@ const supabase = createClient(
 
 const DRY_RUN = process.env.DRY_RUN === "true"
 
-const rateCache = new Map()
-let historicalData = null
-
-function normalizeDate(d) {
-  return String(d).slice(0, 10)
-}
-
-async function loadHistorical() {
-  if (historicalData) return historicalData
-
-  const res = await fetch("https://api.bluelytics.com.ar/v2/historical.json")
-  const data = await res.json()
-
-  historicalData = data
-    .map((d) => ({
-      date: normalizeDate(d.date),
-      rate: d.blue?.value_avg
-    }))
-    .filter((d) => d.rate)
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  console.log("Historical rows:", historicalData.length)
-
-  return historicalData
-}
-
-async function getRate(date) {
-  const key = normalizeDate(date)
-
-  if (rateCache.has(key)) return rateCache.get(key)
-
-  const rows = await loadHistorical()
-
-  let selected = null
-
-  for (const r of rows) {
-    if (r.date <= key) {
-      selected = r
-    } else {
-      break
-    }
-  }
-
-  if (!selected) {
-    selected = rows[0]
-  }
-
-  rateCache.set(key, selected.rate)
-  return selected.rate
-}
+// 🔥 VALOR YTD FIJO (ajustable)
+const USD_RATE = 1350
 
 async function run() {
-  console.log("Backfill historical USD started")
+  console.log("Backfill USD (YTD average)")
   console.log("Mode:", DRY_RUN ? "DRY RUN" : "LIVE")
+  console.log("Using rate:", USD_RATE)
 
   const { data: movements, error } = await supabase
     .from("movements")
@@ -69,18 +22,15 @@ async function run() {
 
   if (error) throw error
 
-  console.log("Movements found:", movements.length)
+  console.log("Movements:", movements.length)
 
   let ok = 0
   let fail = 0
 
   for (const m of movements) {
     try {
-      const date = m.date || m.created_at
-      const rate = await getRate(date)
-
       const ars = Number(m.amount)
-      const usd = ars / rate
+      const usd = ars / USD_RATE
 
       if (!DRY_RUN) {
         await supabase
@@ -89,18 +39,15 @@ async function run() {
             currency: "ARS",
             amount_ars: ars,
             amount_usd: usd,
-            usd_exchange_rate: rate
+            usd_exchange_rate: USD_RATE
           })
           .eq("id", m.id)
       }
 
-      console.log(
-        `OK ${m.id} → ARS ${ars} | USD ${usd.toFixed(2)} | TC ${rate}`
-      )
-
+      console.log(`OK ${m.id} → ${usd.toFixed(2)} USD`)
       ok++
     } catch (e) {
-      console.log("FAIL", m.id, e.message)
+      console.log("FAIL", m.id)
       fail++
     }
   }
