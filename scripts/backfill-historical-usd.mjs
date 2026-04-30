@@ -18,7 +18,6 @@ async function run() {
   const { data: movements, error } = await supabase
     .from("movements")
     .select("*")
-    .is("amount_usd", null)
 
   if (error) throw error
 
