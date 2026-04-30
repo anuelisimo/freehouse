@@ -1,0 +1,42 @@
+name: Backfill historical USD
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only, do not update Supabase"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      limit:
+        description: "Max movements to process per run. Use 0 for all."
+        required: true
+        default: "0"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies for script
+        run: npm install @supabase/supabase-js
+
+      - name: Run historical USD backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+        run: node scripts/backfill-historical-usd.mjs
