@@ -214,6 +214,9 @@ CREATE TABLE IF NOT EXISTS public.movements (
   category_id     UUID           NOT NULL REFERENCES public.categories(id)  ON DELETE RESTRICT,
   template_id     UUID                    REFERENCES public.templates(id)   ON DELETE SET NULL,
 
+  -- Agrupa los dos movimientos creados por AMBOS para poder borrarlos juntos
+  linked_group_id UUID,
+
   -- CRÍTICO: quién pagó o cobró (base del cálculo de balance)
   paid_by         TEXT           NOT NULL CHECK (paid_by IN ('mau', 'juani')),
 
@@ -277,6 +280,7 @@ CREATE INDEX IF NOT EXISTS idx_movements_date_desc   ON public.movements(date DE
 CREATE INDEX IF NOT EXISTS idx_movements_period      ON public.movements(date_trunc('month', date));
 CREATE INDEX IF NOT EXISTS idx_movements_business    ON public.movements(business_id);
 CREATE INDEX IF NOT EXISTS idx_movements_category    ON public.movements(category_id);
+CREATE INDEX IF NOT EXISTS idx_movements_linked_group_id ON public.movements(linked_group_id) WHERE linked_group_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_movements_paid_by     ON public.movements(paid_by);
 -- Índice parcial: solo movimientos que afectan balance (los más consultados)
 CREATE INDEX IF NOT EXISTS idx_movements_billable    ON public.movements(date DESC, business_id) WHERE affects_balance = TRUE;

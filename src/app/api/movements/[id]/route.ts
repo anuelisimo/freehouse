@@ -14,6 +14,7 @@ const UpdateSchema = z.object({
   paid_by:         z.enum(['mau', 'juani']).optional(),
   description:     z.string().max(500).optional().nullable(),
   affects_balance: z.boolean().optional(),
+  linked_group_id: z.string().uuid().optional().nullable(),
   split_override:  z.boolean().optional(),
   pct_mau:         z.number().min(0).max(100).optional(),
   pct_juani:       z.number().min(0).max(100).optional(),
@@ -54,6 +55,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .from('movements').select('*').eq('id', params.id).single()
   if (fetchError || !current) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
+  if ((current as any).linked_group_id) {
+    return NextResponse.json(
+      { error: 'Este movimiento fue creado con AMBOS. Para modificarlo, eliminá el registro y volvelo a cargar.' },
+      { status: 409 }
+    )
+  }
+
   // Recalcular porcentajes si cambia negocio/categoría y no hay override manual
   const willBeOverride = updates.split_override ?? current.split_override
   if (!willBeOverride && (updates.business_id || updates.category_id)) {
@@ -92,16 +100,54 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { data: current } = await supabase.from('movements').select('*').eq('id', params.id).single()
-  const { error } = await supabase.from('movements').delete().eq('id', params.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const { data: current, error: fetchError } = await supabase
+    .from('movements')
+    .select('*')
+    .eq('id', params.id)
+    .single()
 
-  if (current) {
-    await supabase.from('audit_log').insert({
-      table_name: 'movements', record_id: params.id, action: 'DELETE',
-      old_data: current as any, user_id: user.id,
-    })
+  if (fetchError || !current) {
+    return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
   }
 
-  return NextResponse.json({ data: null })
+  const linkedGroupId = (current as any).linked_group_id as string | null | undefined
+
+  // Si el movimiento pertenece a un par AMBOS, borrar ambos miembros del grupo.
+  // Si es un movimiento normal, borrar solo el movimiento solicitado.
+  let deletedRows: any[] | null = null
+  let deleteError: any = null
+
+  if (linkedGroupId) {
+    const result = await supabase
+      .from('movements')
+      .delete()
+      .eq('linked_group_id', linkedGroupId)
+      .select('*')
+    deletedRows = result.data
+    deleteError = result.error
+  } else {
+    const result = await supabase
+      .from('movements')
+      .delete()
+      .eq('id', params.id)
+      .select('*')
+    deletedRows = result.data
+    deleteError = result.error
+  }
+
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+
+  if (deletedRows?.length) {
+    await supabase.from('audit_log').insert(
+      deletedRows.map(row => ({
+        table_name: 'movements',
+        record_id: row.id,
+        action: 'DELETE',
+        old_data: row as any,
+        user_id: user.id,
+      }))
+    )
+  }
+
+  return NextResponse.json({ data: null, deleted_count: deletedRows?.length ?? 0 })
 }

@@ -71,6 +71,7 @@ export interface Movement {
   pct_juani: number
   template_id: string | null
   payment_method: string | null
+  linked_group_id: string | null
   created_at: string
   updated_at: string
   businesses?: Business
@@ -147,6 +148,7 @@ export interface MovementPayload {
   pct_juani: number
   template_id?: string
   payment_method?: string
+  linked_group_id?: string | null
 }
 
 export interface TemplatePayload {

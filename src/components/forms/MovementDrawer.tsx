@@ -171,8 +171,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     setSaving(true)
     try {
       if (isAmbos) {
-        // Crear DOS movimientos: uno para Mau (100/0) y uno para Juani (0/100)
+        // Crear DOS movimientos vinculados: uno para Mau (100/0) y uno para Juani (0/100)
         const half = amount / 2
+        const linkedGroupId = crypto.randomUUID()
         const base = {
           currency: form.currency, exchange_rate: rate,
           type: form.type, business_id: form.business_id,
@@ -180,6 +181,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
           description: form.description || query || undefined,
           affects_balance: false, split_override: true,
           payment_method: form.payment_method,
+          linked_group_id: linkedGroupId,
         }
         const responses = await Promise.all([
           fetch('/api/movements', {

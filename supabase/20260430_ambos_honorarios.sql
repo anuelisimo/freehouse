@@ -60,3 +60,12 @@ BEGIN
       AND t.business_id = biz_project
   );
 END $$;
+
+-- 4) Vincular movimientos creados con AMBOS para borrado conjunto
+ALTER TABLE public.movements
+ADD COLUMN IF NOT EXISTS linked_group_id UUID;
+
+CREATE INDEX IF NOT EXISTS idx_movements_linked_group_id
+ON public.movements(linked_group_id)
+WHERE linked_group_id IS NOT NULL;
+

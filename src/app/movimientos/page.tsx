@@ -259,8 +259,17 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
 }) {
   const isIncome = m.type === 'ingreso'
   const isLiquid = m.type === 'liquidacion'
+  const isLinkedAmbos = !!m.linked_group_id
   const biz = (m.businesses as any)
   const cat = (m.categories as any)
+
+  function handleEditClick() {
+    if (isLinkedAmbos) {
+      alert('Este movimiento fue creado con AMBOS. Para modificarlo, eliminá el registro y volvelo a cargar.')
+      return
+    }
+    onEdit()
+  }
 
   return (
     <div className="flex items-center gap-3 px-3 py-3 transition-all hover:bg-[var(--s2)]"
@@ -302,7 +311,12 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
         {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>
       <div className="flex gap-1 flex-shrink-0">
-        <button onClick={onEdit} className="btn-icon w-7 h-7 text-xs">✏</button>
+        <button
+          onClick={handleEditClick}
+          className="btn-icon w-7 h-7 text-xs"
+          title={isLinkedAmbos ? 'AMBOS: eliminá y volvé a cargar para modificar' : 'Editar'}
+          style={isLinkedAmbos ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+        >✏</button>
         <button onClick={onDelete} className="btn-icon w-7 h-7 text-xs"
           style={{ opacity: deleting ? 0.4 : 1, color: deleting ? 'var(--danger)' : undefined }}>
           {deleting ? '…' : '✕'}
