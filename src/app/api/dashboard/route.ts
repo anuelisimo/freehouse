@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const period     = searchParams.get('period')
   const businessId = searchParams.get('business_id')
+  const currencyView = searchParams.get('currency') === 'USD' ? 'USD' : 'ARS'
 
   // Rango de fechas para el período
   let dateFilter: { gte?: string; lte?: string } = {}
@@ -42,8 +43,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     data: {
-      globalBalance:    calculateBalance(movements as any),
-      byBusiness:       calculateBalanceByBusiness(movements as any, businesses),
+      globalBalance:    calculateBalance(movements as any, currencyView),
+      byBusiness:       calculateBalanceByBusiness(movements as any, businesses, currencyView),
       recentMovements:  movements.slice(0, 10),
       periods:          getAvailablePeriods(allDates),
       currentPeriod:    period ?? 'all',

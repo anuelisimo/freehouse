@@ -93,29 +93,27 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     }
   }, [open, prefillTemplateId, templates])
 
-  useEffect(() => {
-    if (!open || !form.date) return
-    let cancelled = false
-    async function loadUsdRate() {
-      setRateLoading(true)
-      setRateError(null)
-      try {
-        const res = await fetch(`/api/exchange-rates?currency=USD&date=${form.date}`)
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? 'No se pudo obtener el dólar')
-        if (!cancelled) setUsdRate(Number(json.data?.rate ?? 0))
-      } catch (e: any) {
-        if (!cancelled) {
-          setRateError(e.message ?? 'No se pudo obtener el dólar')
-          if (!usdRate && exchangeRates['USD']) setUsdRate(exchangeRates['USD'])
-        }
-      } finally {
-        if (!cancelled) setRateLoading(false)
-      }
+  async function getLiveUsdRate(): Promise<number> {
+    setRateLoading(true)
+    setRateError(null)
+    try {
+      // Cotización efectiva: se lee recién al apretar Registrar.
+      // Sin date => /api/exchange-rates usa dólar blue actual, sin caché.
+      const res = await fetch('/api/exchange-rates?currency=USD', { cache: 'no-store' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'No se pudo obtener el dólar')
+      const rate = Number(json.data?.rate ?? 0)
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Cotización inválida')
+      setUsdRate(rate)
+      return rate
+    } catch (e: any) {
+      const msg = e.message ?? 'No se pudo obtener el dólar'
+      setRateError(msg)
+      throw new Error(msg)
+    } finally {
+      setRateLoading(false)
     }
-    loadUsdRate()
-    return () => { cancelled = true }
-  }, [open, form.date])
+  }
 
   useEffect(() => {
     if (!form.split_override && form.business_id && form.category_id && rules.length) {
@@ -200,12 +198,17 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     if (!validate()) return
     setSaving(true)
     try {
+      // Leer dólar blue actual en el momento efectivo del registro.
+      // Ese mismo valor se usa para guardar ARS/USD y, en AMBOS, para los dos movimientos.
+      const liveUsdRate = await getLiveUsdRate()
+      const liveExchangeRate = form.currency === 'USD' ? liveUsdRate : 1
+
       if (isAmbos) {
         // Crear DOS movimientos vinculados: uno para Mau (100/0) y uno para Juani (0/100)
         const half = amount / 2
         const linkedGroupId = crypto.randomUUID()
         const base = {
-          currency: form.currency, exchange_rate: rate, usd_exchange_rate: usdRateForCalc,
+          currency: form.currency, exchange_rate: liveExchangeRate, usd_exchange_rate: liveUsdRate,
           type: form.type, business_id: form.business_id,
           category_id: form.category_id, date: form.date,
           description: form.description || query || undefined,
@@ -231,7 +234,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
         const res = await fetch(editId ? `/api/movements/${editId}` : '/api/movements', {
           method:  editId ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ...form, amount, exchange_rate: rate, usd_exchange_rate: usdRateForCalc }),
+          body:    JSON.stringify({ ...form, amount, exchange_rate: liveExchangeRate, usd_exchange_rate: liveUsdRate }),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error?.message ?? json.error ?? 'Error')
@@ -395,7 +398,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                       {form.currency === 'USD'
                         ? `≈ ${fmtARS(amtARS)} · TC ${fmtARS(usdRateForCalc)}`
                         : `≈ ${fmtUSD(amtUSD)} · TC ${fmtARS(usdRateForCalc)}`}
-                      {rateLoading ? ' · actualizando…' : ''}
+                      {rateLoading ? ' · leyendo TC…' : ''}
                       {rateError ? ` · ${rateError}` : ''}
                     </div>
                   )}

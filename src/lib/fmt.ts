@@ -30,3 +30,19 @@ export function fmtUSD(n: number, compact = false): string {
     minimumFractionDigits: compact ? 0 : 2, maximumFractionDigits: compact ? 0 : 2,
   }).format(n)
 }
+
+
+export type CurrencyView = 'ARS' | 'USD'
+
+export function fmtMoney(n: number | null | undefined, currency: CurrencyView, compact = false): string {
+  const value = Number(n ?? 0)
+  return currency === 'USD' ? fmtUSD(value, compact) : fmtARS(value, compact)
+}
+
+export function movementDisplayAmount(
+  movement: { amount?: number | null; currency?: string | null; amount_ars?: number | null; amount_usd?: number | null },
+  currency: CurrencyView
+): number {
+  if (currency === 'USD') return Number(movement.amount_usd ?? (movement.currency === 'USD' ? movement.amount : 0) ?? 0)
+  return Number(movement.amount_ars ?? (movement.currency === 'ARS' ? movement.amount : 0) ?? 0)
+}

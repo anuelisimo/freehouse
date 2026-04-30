@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { CurrencyViewProvider } from '@/context/CurrencyViewContext'
 
 export const metadata: Metadata = {
   title: 'FreeHouse',
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
       </head>
-      <body className="h-full">{children}</body>
+      <body className="h-full"><CurrencyViewProvider>{children}</CurrencyViewProvider></body>
     </html>
   )
 }

@@ -1,5 +1,13 @@
 import type { Movement, SplitRule, Business, PeriodBalance, BusinessBalance } from '@/types'
 
+export type BalanceCurrency = 'ARS' | 'USD'
+
+function balanceAmount(m: Movement, currency: BalanceCurrency): number {
+  if (currency === 'USD') return Number(m.amount_usd ?? 0)
+  return Number(m.amount_ars ?? 0)
+}
+
+
 // ============================================================
 // BALANCE ENGINE — Lógica financiera central
 //
@@ -13,7 +21,7 @@ import type { Movement, SplitRule, Business, PeriodBalance, BusinessBalance } fr
 // FUENTE DE VERDAD: paid_by (NUNCA created_by)
 // ============================================================
 
-export function calculateBalance(movements: Movement[]): PeriodBalance {
+export function calculateBalance(movements: Movement[], currency: BalanceCurrency = 'ARS'): PeriodBalance {
   // Solo movimientos que afectan el balance
   const billable = movements.filter(m => m.affects_balance)
 
@@ -25,7 +33,7 @@ export function calculateBalance(movements: Movement[]): PeriodBalance {
   let totalExpense = 0
 
   for (const m of billable) {
-    const amtARS = Number(m.amount_ars)
+    const amtARS = balanceAmount(m, currency)
 
     // Liquidación: reduce la deuda directamente, no afecta ingresos/gastos
     // El que paga (paid_by) reduce su deuda → se registra como "pagó" positivo
@@ -80,11 +88,12 @@ export function calculateBalance(movements: Movement[]): PeriodBalance {
 
 export function calculateBalanceByBusiness(
   movements: Movement[],
-  businesses: Business[]
+  businesses: Business[],
+  currency: BalanceCurrency = 'ARS'
 ): BusinessBalance[] {
   return businesses.map(biz => ({
     business: biz,
-    ...calculateBalance(movements.filter(m => m.business_id === biz.id)),
+    ...calculateBalance(movements.filter(m => m.business_id === biz.id), currency),
   }))
 }
 

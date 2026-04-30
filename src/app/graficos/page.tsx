@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { fmtARS, fmtPeriod } from '@/lib/fmt'
+import { fmtMoney, movementDisplayAmount, fmtPeriod } from '@/lib/fmt'
+import { useCurrencyView } from '@/context/CurrencyViewContext'
 
 interface PeriodData {
   period: string
@@ -29,6 +30,7 @@ export default function GraficosPage() {
   const [bizData, setBizData]   = useState<BizData[]>([])
   const [catData, setCatData]   = useState<CatData[]>([])
   const [loading, setLoading]   = useState(true)
+  const { currencyView } = useCurrencyView()
 
   useEffect(() => {
     async function load() {
@@ -47,7 +49,7 @@ export default function GraficosPage() {
       for (const m of movs) {
         const p = m.date.slice(0, 7)
         if (!byPeriod[p]) byPeriod[p] = { income: 0, expense: 0, mauPaid: 0, juaniPaid: 0, mauShould: 0, juaniShould: 0 }
-        const amt = Number(m.amount_ars)
+        const amt = movementDisplayAmount(m, currencyView)
         if (m.type === 'ingreso') byPeriod[p].income += amt
         else                      byPeriod[p].expense += amt
 
@@ -77,7 +79,7 @@ export default function GraficosPage() {
         const biz = m.businesses
         if (!biz) continue
         if (!byBiz[biz.name]) byBiz[biz.name] = { income: 0, expense: 0, color: biz.color }
-        const amt = Number(m.amount_ars)
+        const amt = movementDisplayAmount(m, currencyView)
         if (m.type === 'ingreso') byBiz[biz.name].income  += amt
         else                      byBiz[biz.name].expense += amt
       }
@@ -87,7 +89,7 @@ export default function GraficosPage() {
       const byCat: Record<string, number> = {}
       for (const m of movs.filter((m: any) => m.type === 'gasto')) {
         const cat = m.categories?.name ?? 'otros'
-        byCat[cat] = (byCat[cat] ?? 0) + Number(m.amount_ars)
+        byCat[cat] = (byCat[cat] ?? 0) + movementDisplayAmount(m, currencyView)
       }
       const catList = Object.entries(byCat)
         .sort(([,a], [,b]) => b - a)
@@ -100,7 +102,7 @@ export default function GraficosPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [currencyView])
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
@@ -131,7 +133,7 @@ export default function GraficosPage() {
 
         <div>
           <div className="text-sm font-mono font-semibold uppercase tracking-wide">Gráficos</div>
-          <div className="lbl mt-0.5">{periods.length} períodos · {periods.reduce((s,p) => s + p.income + p.expense, 0) > 0 ? fmtARS(periods.reduce((s,p) => s + p.expense, 0), true) + ' total gastos' : ''}</div>
+          <div className="lbl mt-0.5">{periods.length} períodos · {periods.reduce((s,p) => s + p.income + p.expense, 0) > 0 ? fmtMoney(periods.reduce((s,p) => s + p.expense, 0), currencyView, true) + ' total gastos' : ''}</div>
         </div>
 
         {/* ── 1. EVOLUCIÓN MENSUAL ────────────────────────── */}
@@ -193,7 +195,7 @@ export default function GraficosPage() {
                   <div className="flex justify-between mb-1">
                     <span className="lbl">{fmtPeriod(p.period)}</span>
                     <span className={`num text-xs font-semibold ${isPos ? 'num-pos' : 'num-neg'}`}>
-                      {isPos ? 'J→M ' : 'M→J '}{fmtARS(Math.abs(p.mauBalance), true)}
+                      {isPos ? 'J→M ' : 'M→J '}{fmtMoney(Math.abs(p.mauBalance), currencyView, true)}
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full" style={{ background: 'var(--border)' }}>
@@ -225,8 +227,8 @@ export default function GraficosPage() {
                       <span className="text-xs font-mono font-medium" style={{ color: 'var(--text)' }}>{b.name}</span>
                     </div>
                     <div className="flex gap-3">
-                      <span className="num text-xs num-pos">{fmtARS(b.income, true)}</span>
-                      <span className="num text-xs num-neg">{fmtARS(b.expense, true)}</span>
+                      <span className="num text-xs num-pos">{fmtMoney(b.income, currencyView, true)}</span>
+                      <span className="num text-xs num-neg">{fmtMoney(b.expense, currencyView, true)}</span>
                     </div>
                   </div>
                   <div className="h-1.5 rounded-full flex overflow-hidden" style={{ background: 'var(--border)' }}>
@@ -253,7 +255,7 @@ export default function GraficosPage() {
                       <span className="text-xs font-mono capitalize" style={{ color: 'var(--text)' }}>{c.name}</span>
                       <div className="flex items-center gap-2">
                         <span className="lbl">{pct.toFixed(0)}%</span>
-                        <span className="num text-xs" style={{ color: colors[i] }}>{fmtARS(c.total, true)}</span>
+                        <span className="num text-xs" style={{ color: colors[i] }}>{fmtMoney(c.total, currencyView, true)}</span>
                       </div>
                     </div>
                     <div className="h-1.5 rounded-full" style={{ background: 'var(--border)' }}>
@@ -268,7 +270,7 @@ export default function GraficosPage() {
             </div>
             <div className="mt-3 pt-2 flex justify-between" style={{ borderTop: '1px solid var(--border)' }}>
               <span className="lbl">TOTAL GASTOS</span>
-              <span className="num text-xs num-neg">{fmtARS(totalCat, true)}</span>
+              <span className="num text-xs num-neg">{fmtMoney(totalCat, currencyView, true)}</span>
             </div>
           </div>
         )}

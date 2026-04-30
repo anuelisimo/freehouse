@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/hooks/useTheme'
+import { useCurrencyView } from '@/context/CurrencyViewContext'
 
 interface Props { name: string; initial: string; isMau: boolean }
 
@@ -10,6 +11,7 @@ export default function TopBar({ name, initial, isMau }: Props) {
   const router   = useRouter()
   const supabase = createClient()
   const { theme, toggle } = useTheme()
+  const { currencyView, setCurrencyView } = useCurrencyView()
 
   async function logout() {
     await supabase.auth.signOut()
@@ -37,6 +39,31 @@ export default function TopBar({ name, initial, isMau }: Props) {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
+
+        {/* Currency view toggle */}
+        <div
+          className="flex items-center rounded-md overflow-hidden"
+          style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}
+          title="Cambiar moneda de visualización"
+        >
+          {(['ARS', 'USD'] as const).map(c => {
+            const active = currencyView === c
+            return (
+              <button
+                key={c}
+                onClick={() => setCurrencyView(c)}
+                className="h-8 px-2 text-[10px] font-mono font-semibold transition-all"
+                style={{
+                  background: active ? 'rgba(0,255,136,0.10)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--text3)',
+                  borderRight: c === 'ARS' ? '1px solid var(--border)' : 'none',
+                }}
+              >
+                {c}
+              </button>
+            )
+          })}
+        </div>
 
         {/* Theme toggle */}
         <button

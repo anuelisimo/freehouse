@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { Movement, Business } from '@/types'
-import { fmtARS, fmtUSD, fmtDate, fmtPeriod } from '@/lib/fmt'
+import { fmtMoney, movementDisplayAmount, fmtDate, fmtPeriod } from '@/lib/fmt'
+import { useCurrencyView } from '@/context/CurrencyViewContext'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
 interface Filters {
@@ -27,6 +28,7 @@ export default function MovimientosPage() {
   const [deleting,   setDel]     = useState<string | null>(null)
   const [exporting,  setExport]  = useState(false)
   const [backfilling, setBackfill] = useState(false)
+  const { currencyView } = useCurrencyView()
 
   useEffect(() => {
     fetch('/api/catalog').then(r => r.json()).then(j => setBiz(j.data?.businesses ?? []))
@@ -248,7 +250,7 @@ export default function MovimientosPage() {
         ) : (
           <div className="card overflow-hidden">
             {filteredMovs.map((m, i) => (
-              <MovRow key={m.id} m={m} last={i === filteredMovs.length - 1}
+              <MovRow key={m.id} m={m} last={i === filteredMovs.length - 1} currencyView={currencyView}
                 onEdit={() => openEdit(m.id)} onDelete={() => handleDelete(m.id)}
                 deleting={deleting === m.id} />
             ))}
@@ -277,8 +279,8 @@ export default function MovimientosPage() {
 }
 
 // ── Fila de movimiento ─────────────────────────────────────
-function MovRow({ m, last, onEdit, onDelete, deleting }: {
-  m: Movement; last: boolean
+function MovRow({ m, last, currencyView, onEdit, onDelete, deleting }: {
+  m: Movement; last: boolean; currencyView: 'ARS' | 'USD'
   onEdit: () => void; onDelete: () => void; deleting: boolean
 }) {
   const isIncome = m.type === 'ingreso'
@@ -330,11 +332,9 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
       <div className="text-right flex-shrink-0 mr-1">
         <div className={`num text-sm font-semibold ${isLiquid ? '' : isIncome ? 'num-pos' : 'num-neg'}`}
           style={isLiquid ? { color: 'var(--cyan)' } : {}}>
-          {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtARS(m.amount_ars)}
+          {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtMoney(movementDisplayAmount(m, currencyView), currencyView)}
         </div>
-        {m.amount_usd != null && (
-          <div className="lbl" style={{ color: 'var(--text3)' }}>{fmtUSD(Number(m.amount_usd), true)}</div>
-        )}
+        <div className="lbl" style={{ color: 'var(--text3)' }}>orig. {m.currency ?? 'ARS'}</div>
         {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>
       <div className="flex gap-1 flex-shrink-0">

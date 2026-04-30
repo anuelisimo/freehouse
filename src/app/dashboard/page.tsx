@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { PeriodBalance, BusinessBalance, Movement } from '@/types'
-import { fmtARS, fmtUSD, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
+import { fmtMoney, movementDisplayAmount, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
+import { useCurrencyView } from '@/context/CurrencyViewContext'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
 interface DashData {
@@ -24,15 +25,17 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState('all')
   const [loading, setLoad]  = useState(true)
   const [drawer, setDrawer] = useState(false)
+  const { currencyView } = useCurrencyView()
 
   const load = useCallback(async (p: string) => {
     setLoad(true)
-    const q = p !== 'all' ? `?period=${p}` : ''
-    const r = await fetch(`/api/dashboard${q}`)
+    const params = new URLSearchParams({ currency: currencyView })
+    if (p !== 'all') params.set('period', p)
+    const r = await fetch(`/api/dashboard?${params}`)
     const j = await r.json()
     setData(j.data)
     setLoad(false)
-  }, [])
+  }, [currencyView])
 
   useEffect(() => { load(period) }, [period, load])
 
@@ -100,7 +103,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className={`num-xl mb-1 ${!debtor ? 'num-pos' : isGreen ? 'num-pos' : 'num-neg'}`}>
-                  {!debtor ? '$ 0.00' : fmtARS(debt)}
+                  {!debtor ? fmtMoney(0, currencyView) : fmtMoney(debt, currencyView)}
                 </div>
                 <div className="text-xs font-mono" style={{ color: 'var(--text2)' }}>
                   {!debtor ? (
@@ -143,7 +146,7 @@ export default function DashboardPage() {
                           <div key={lbl as string} className="flex justify-between items-baseline">
                             <span className="lbl">{lbl as string}</span>
                             <span className={`num text-xs font-medium ${lbl === 'SALDO' ? ((val as number) >= 0 ? 'num-pos' : 'num-neg') : 'num-neu'}`}>
-                              {lbl === 'SALDO' && (val as number) > 0 ? '+' : ''}{fmtARS(val as number, true)}
+                              {lbl === 'SALDO' && (val as number) > 0 ? '+' : ''}{fmtMoney(val as number, currencyView, true)}
                             </span>
                           </div>
                         ))}
@@ -169,7 +172,7 @@ export default function DashboardPage() {
               <div className="lbl mb-1.5">{s.lbl}</div>
               {loading ? <Skel h="h-5" /> : (
                 <div className="num text-sm font-semibold" style={{ color: s.col }}>
-                  {s.up ? '▲ ' : '▼ '}{fmtARS(Math.abs(s.val), true)}
+                  {s.up ? '▲ ' : '▼ '}{fmtMoney(Math.abs(s.val), currencyView, true)}
                 </div>
               )}
             </div>
@@ -190,7 +193,7 @@ export default function DashboardPage() {
           <div className="space-y-1">
             {loading
               ? [1,2,3].map(i => <Skel key={i} h="h-12" />)
-              : data?.byBusiness.map(bb => <BizRow key={bb.business.id} bb={bb} />)
+              : data?.byBusiness.map(bb => <BizRow key={bb.business.id} bb={bb} currencyView={currencyView} />)
             }
           </div>
         </div>
@@ -216,7 +219,7 @@ export default function DashboardPage() {
               ? [1,2,3,4,5].map(i => <div key={i} className="px-3 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}><Skel h="h-4" /></div>)
               : !data?.recentMovements.length
                 ? <div className="p-8 text-center lbl" style={{ color: 'var(--text3)' }}>SIN OPERACIONES</div>
-                : data.recentMovements.map(m => <TradeRow key={m.id} m={m} />)
+                : data.recentMovements.map(m => <TradeRow key={m.id} m={m} currencyView={currencyView} />)
             }
           </div>
         </div>
@@ -238,23 +241,23 @@ export default function DashboardPage() {
   )
 }
 
-function BizRow({ bb }: { bb: BusinessBalance }) {
+function BizRow({ bb, currencyView }: { bb: BusinessBalance; currencyView: 'ARS' | 'USD' }) {
   const balance = bb.mau.balance
   const isZero  = Math.abs(balance) < 1
   return (
     <div className="card grid items-center px-3 py-2.5 transition-all hover:border-[var(--border2)]"
       style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, borderLeft: `2px solid ${bb.business.color}` }}>
       <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text)' }}>{bb.business.name}</div>
-      <div className="num text-xs text-right num-pos">{fmtARS(bb.totalIncome, true)}</div>
-      <div className="num text-xs text-right num-neg">{fmtARS(bb.totalExpense, true)}</div>
+      <div className="num text-xs text-right num-pos">{fmtMoney(bb.totalIncome, currencyView, true)}</div>
+      <div className="num text-xs text-right num-neg">{fmtMoney(bb.totalExpense, currencyView, true)}</div>
       <div className={`num text-xs text-right font-semibold ${isZero ? 'num-neu' : balance > 0 ? 'num-pos' : 'num-neg'}`}>
-        {isZero ? '—' : `${balance > 0 ? '+' : ''}${fmtARS(balance, true)}`}
+        {isZero ? '—' : `${balance > 0 ? '+' : ''}${fmtMoney(balance, currencyView, true)}`}
       </div>
     </div>
   )
 }
 
-function TradeRow({ m }: { m: Movement }) {
+function TradeRow({ m, currencyView }: { m: Movement; currencyView: 'ARS' | 'USD' }) {
   const isIncome = m.type === 'ingreso'
   return (
     <div className="grid px-3 py-2.5 transition-all hover:bg-[var(--s2)]"
@@ -272,8 +275,8 @@ function TradeRow({ m }: { m: Movement }) {
         {m.paid_by === 'mau' ? 'MAU' : 'JUA'}
       </div>
       <div className={`num text-xs text-right font-medium ${isIncome ? 'num-pos' : 'num-neg'}`}>
-        {isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
-        {m.amount_usd != null && <div className="lbl" style={{ color: 'var(--text3)' }}>{fmtUSD(Number(m.amount_usd), true)}</div>}
+        {isIncome ? '+' : '-'}{fmtMoney(movementDisplayAmount(m, currencyView), currencyView, true)}
+        <div className="lbl" style={{ color: 'var(--text3)' }}>orig. {m.currency ?? 'ARS'}</div>
       </div>
     </div>
   )

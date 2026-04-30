@@ -17,17 +17,19 @@ function normalizeDate(date?: string | null): string {
   return date.slice(0, 10)
 }
 
-function parseBlueSell(row: any): number | null {
-  const value = row?.value_sell ?? row?.blue?.value_sell ?? row?.blue?.sell
+function parseBlueAverage(row: any): number | null {
+  // Usamos dólar blue promedio: es más estable para contabilidad interna
+  // que value_sell/value_buy y evita ruido innecesario en movimientos.
+  const value = row?.value_avg ?? row?.blue?.value_avg ?? row?.blue?.avg
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
 export async function getCurrentUsdBlueRate(): Promise<DollarRateResult> {
-  const res = await fetch(BLUELYTICS_LATEST_URL, { next: { revalidate: 60 * 10 } })
+  const res = await fetch(BLUELYTICS_LATEST_URL, { cache: 'no-store' })
   if (!res.ok) throw new Error('No se pudo obtener la cotización actual')
   const json = await res.json()
-  const rate = parseBlueSell(json)
+  const rate = parseBlueAverage(json)
   if (!rate) throw new Error('Respuesta inválida de cotización actual')
 
   return {
@@ -50,7 +52,7 @@ export async function getHistoricalUsdBlueRate(date: string): Promise<DollarRate
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
 
   const selected = candidates[0]
-  const rate = parseBlueSell(selected)
+  const rate = parseBlueAverage(selected)
   if (!selected || !rate) throw new Error(`No hay cotización histórica para ${target}`)
 
   return {

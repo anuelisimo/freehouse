@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveRule } from '@/lib/balance'
 import { z } from 'zod'
+import { getCurrentUsdBlueRate } from '@/lib/exchangeRate'
 
 const MovementSchema = z.object({
   date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
@@ -157,6 +158,28 @@ export async function POST(request: NextRequest) {
     pct_juani = payload.pct_juani!
   }
 
+  // Moneda: guardar siempre la cotización USD blue usada.
+  // Normalmente llega desde el frontend recién leída al apretar Registrar.
+  // Si falta por compatibilidad con clientes viejos, la API la busca igual.
+  let usdExchangeRate = payload.usd_exchange_rate ?? null
+  if (!usdExchangeRate) {
+    try {
+      const liveRate = await getCurrentUsdBlueRate()
+      usdExchangeRate = liveRate.rate
+
+      await supabase.from('exchange_rates').upsert({
+        currency: 'USD',
+        rate: liveRate.rate,
+        valid_from: liveRate.date,
+        created_by: user.id,
+      }, { onConflict: 'currency,valid_from' })
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message ?? 'Error obteniendo cotización USD' }, { status: 500 })
+    }
+  }
+
+  const exchangeRate = payload.currency === 'USD' ? usdExchangeRate : 1
+
   // Escribir la auditoría y el movimiento en una sola operación
   const { data, error } = await supabase
     .from('movements')
@@ -164,8 +187,8 @@ export async function POST(request: NextRequest) {
       date:            payload.date,
       amount:          payload.amount,
       currency:        payload.currency,
-      exchange_rate:   payload.exchange_rate,
-      usd_exchange_rate: payload.usd_exchange_rate ?? (payload.currency === 'USD' ? payload.exchange_rate : null),
+      exchange_rate:   exchangeRate,
+      usd_exchange_rate: usdExchangeRate,
       type:            payload.type,
       business_id:     payload.business_id,
       category_id:     payload.category_id,
