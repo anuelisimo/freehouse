@@ -42,8 +42,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   const [showSugg, setShowSugg] = useState(false)
   const amtRef = useRef<HTMLInputElement>(null)
 
-  // "AMBOS" solo aplica cuando tipo es ingreso
   const isAmbos = form.paid_by === 'ambos'
+  const ambosAction = form.type === 'gasto' ? 'paga' : 'cobra'
+  const ambosTitle = form.type === 'gasto' ? '⚡ PAGO COMPARTIDO' : '⚡ COBRO COMPARTIDO'
 
   useEffect(() => {
     fetch('/api/templates').then(r => r.json()).then(j => setTmpl(j.data ?? []))
@@ -80,7 +81,8 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
       if (t) {
         setF(f => ({ ...f, type: t.type as MovType, business_id: t.business_id,
           category_id: t.category_id, paid_by: t.default_paid_by as Partner,
-          description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo' }))
+          description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo',
+          ...(t.default_paid_by === 'ambos' ? { affects_balance: false, split_override: true, pct_mau: 50, pct_juani: 50 } : {}) }))
         setQuery(t.name)
         setTimeout(() => amtRef.current?.focus(), 150)
       }
@@ -101,7 +103,8 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   function applyTmpl(t: Template) {
     setF(f => ({ ...f, type: t.type as MovType, business_id: t.business_id,
       category_id: t.category_id, paid_by: t.default_paid_by as Partner,
-      description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo' }))
+      description: t.description ?? t.name, payment_method: f.payment_method || 'efectivo',
+          ...(t.default_paid_by === 'ambos' ? { affects_balance: false, split_override: true, pct_mau: 50, pct_juani: 50 } : {}) }))
     setQuery(t.name); setShowSugg(false)
     setTimeout(() => amtRef.current?.focus(), 50)
   }
@@ -155,7 +158,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
     const errors: FieldErrors = {}
     if (!form.type)           errors.type          = 'Seleccioná un tipo'
     if (!amount || amount<=0) errors.amount         = 'Ingresá un monto'
-    if (!form.paid_by)        errors.paid_by        = 'Seleccioná quién cobró'
+    if (!form.paid_by)        errors.paid_by        = form.type === 'ingreso' ? 'Seleccioná quién cobró' : 'Seleccioná quién pagó'
     if (!form.payment_method) errors.payment_method = 'Seleccioná el medio de pago'
     if (!form.business_id)    errors.business_id    = 'Seleccioná un negocio'
     if (!form.category_id)    errors.category_id    = 'Seleccioná una categoría'
@@ -178,7 +181,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
           affects_balance: false, split_override: true,
           payment_method: form.payment_method,
         }
-        await Promise.all([
+        const responses = await Promise.all([
           fetch('/api/movements', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...base, amount: half, paid_by: 'mau', pct_mau: 100, pct_juani: 0 }),
@@ -188,6 +191,10 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
             body: JSON.stringify({ ...base, amount: half, paid_by: 'juani', pct_mau: 0, pct_juani: 100 }),
           }),
         ])
+        for (const res of responses) {
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(json.error?.message ?? json.error ?? 'Error')
+        }
       } else {
         const res = await fetch(editId ? `/api/movements/${editId}` : '/api/movements', {
           method:  editId ? 'PATCH' : 'POST',
@@ -267,8 +274,8 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                             pct_juani: f.paid_by === 'mau' ? 100 : 0,
                             affects_balance: true }))
                         }
-                        // Si cambia a gasto, resetear AMBOS
-                        if (t !== 'ingreso' && form.paid_by === 'ambos') {
+                        // Si cambia a liquidación, resetear AMBOS
+                        if (t === 'liquidacion' && form.paid_by === 'ambos') {
                           setF(f => ({ ...f, type: t, paid_by: '', affects_balance: true, split_override: false }))
                         }
                       }}
@@ -326,8 +333,8 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                               {(t.businesses as any)?.name} · {(t.categories as any)?.name}
                             </div>
                           </div>
-                          <div className="lbl" style={{ color: t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
-                            {t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
+                          <div className="lbl" style={{ color: t.default_paid_by === 'ambos' ? '#a78bfa' : t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
+                            {t.default_paid_by === 'ambos' ? 'AMBOS' : t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
                           </div>
                         </button>
                       ))}
@@ -354,12 +361,12 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   {form.currency === 'USD' && amount > 0 && (
                     <div className="lbl mt-1.5">≈ {fmtARS(amtARS)} · TC {fmtARS(exchangeRates['USD'] ?? 0)}</div>
                   )}
-                  {/* Preview cobro compartido */}
+                  {/* Preview compartido */}
                   {isAmbos && amount > 0 && (
                     <div className="mt-2 p-2 rounded-sm flex justify-between"
                       style={{ background: 'var(--s2)', border: '1px solid var(--border)' }}>
-                      <span className="num text-xs" style={{ color: 'var(--mau)' }}>MAU cobra {fmtARS(mauAmt)}</span>
-                      <span className="num text-xs" style={{ color: 'var(--juani)' }}>JUANI cobra {fmtARS(juaniAmt)}</span>
+                      <span className="num text-xs" style={{ color: 'var(--mau)' }}>MAU {ambosAction} {fmtARS(mauAmt)}</span>
+                      <span className="num text-xs" style={{ color: 'var(--juani)' }}>JUANI {ambosAction} {fmtARS(juaniAmt)}</span>
                     </div>
                   )}
                 </div>
@@ -371,9 +378,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                   {form.type === 'ingreso' ? 'COBRADO POR' : 'PAGADO POR'}
                   {fieldErrors.paid_by && <span className="ml-2 text-[10px] font-mono" style={{ color: 'var(--danger)' }}>← {fieldErrors.paid_by}</span>}
                 </div>
-                {/* MAU + JUANI siempre visibles, AMBOS solo para ingresos */}
-                <div className={`grid gap-2 ${form.type === 'ingreso' ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                  {(['mau', 'juani', ...(form.type === 'ingreso' ? ['ambos'] : [])] as Partner[]).map(p => {
+                {/* MAU + JUANI siempre visibles, AMBOS para ingresos y gastos */}
+                <div className={`grid gap-2 ${form.type === 'liquidacion' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {(['mau', 'juani', ...(form.type !== 'liquidacion' ? ['ambos'] : [])] as Partner[]).map(p => {
                     const active = form.paid_by === p
                     const isAmboBtn = p === 'ambos'
                     const col  = isAmboBtn ? '#a78bfa' : p === 'mau' ? 'var(--mau)' : 'var(--juani)'
@@ -414,7 +421,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                 {/* Info AMBOS */}
                 {isAmbos && (
                   <div className="mt-2 p-2.5 rounded-sm" style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)' }}>
-                    <div className="text-xs font-mono" style={{ color: '#a78bfa' }}>⚡ COBRO COMPARTIDO</div>
+                    <div className="text-xs font-mono" style={{ color: '#a78bfa' }}>{ambosTitle}</div>
                     <div className="lbl mt-1" style={{ color: 'var(--text2)' }}>
                       Se crearán 2 movimientos automáticamente — uno por cada socio por el 50% del monto total.
                     </div>
@@ -552,7 +559,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                       style={{ accentColor: 'var(--accent)' }} />
                     <div>
                       <div className="text-xs font-mono font-medium" style={{ color: 'var(--text)' }}>
-                        AFECTA BALANCE {isAmbos && <span style={{ color: '#a78bfa' }}>(bloqueado — cobro compartido)</span>}
+                        AFECTA BALANCE {isAmbos && <span style={{ color: '#a78bfa' }}>(bloqueado — {form.type === 'gasto' ? 'pago compartido' : 'cobro compartido'})</span>}
                       </div>
                       <div className="lbl" style={{ color: 'var(--text3)' }}>Desactivar para excluir del cálculo de deuda</div>
                     </div>
@@ -570,7 +577,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
               )}
 
               {/* Error general */}
-              {fieldErrors.type && !['Seleccioná un tipo','Ingresá un monto','Seleccioná quién cobró','Seleccioná el medio de pago','Seleccioná un negocio','Seleccioná una categoría'].includes(fieldErrors.type) && (
+              {fieldErrors.type && !['Seleccioná un tipo','Ingresá un monto','Seleccioná quién cobró','Seleccioná quién pagó','Seleccioná el medio de pago','Seleccioná un negocio','Seleccioná una categoría'].includes(fieldErrors.type) && (
                 <div className="py-2 px-3 rounded-sm text-xs font-mono text-center mb-3"
                   style={{ background: 'rgba(255,51,85,0.07)', color: 'var(--danger)', border: '1px solid rgba(255,51,85,0.18)' }}>
                   ⚠ {fieldErrors.type}
@@ -588,7 +595,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                     PROCESANDO…
                   </span>
                 ) : editId ? 'CONFIRMAR CAMBIOS'
-                  : isAmbos                      ? `⚡ REGISTRAR COBRO COMPARTIDO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
+                  : isAmbos                      ? `⚡ REGISTRAR ${form.type === 'gasto' ? 'PAGO' : 'COBRO'} COMPARTIDO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
                   : form.type === 'gasto'        ? `▼ REGISTRAR GASTO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
                   : form.type === 'liquidacion'  ? `⇄ REGISTRAR LIQUIDACIÓN · ${amount > 0 ? fmtARS(amtARS) : '$0'}`
                   : form.type === 'ingreso'      ? `▲ REGISTRAR INGRESO · ${amount > 0 ? fmtARS(amtARS) : '$0'}`

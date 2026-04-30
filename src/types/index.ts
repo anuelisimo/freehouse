@@ -1,6 +1,7 @@
 // ── Enums ────────────────────────────────────────────────────
 export type MovementType = 'ingreso' | 'gasto' | 'liquidacion'
 export type Partner = 'mau' | 'juani'
+export type TemplatePartner = Partner | 'ambos'
 export type Currency = 'ARS' | 'USD' | 'EUR'
 
 // ── DB row types ─────────────────────────────────────────────
@@ -41,7 +42,7 @@ export interface Template {
   business_id: string
   category_id: string
   type: MovementType
-  default_paid_by: Partner
+  default_paid_by: TemplatePartner
   description: string | null
   is_favorite: boolean
   created_by: string | null
@@ -153,7 +154,7 @@ export interface TemplatePayload {
   business_id: string
   category_id: string
   type: MovementType
-  default_paid_by: Partner
+  default_paid_by: TemplatePartner
   description?: string
   is_favorite?: boolean
 }

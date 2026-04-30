@@ -188,8 +188,8 @@ function TmplRow({ t, last, onUse, onEdit, onDelete, onFav, deleting }: {
           <span className="lbl">·</span>
           <span className="lbl">{cat?.name ?? '—'}</span>
           <span className="lbl">·</span>
-          <span className="lbl" style={{ color: t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
-            {t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
+          <span className="lbl" style={{ color: t.default_paid_by === 'ambos' ? '#a78bfa' : t.default_paid_by === 'mau' ? 'var(--mau)' : 'var(--juani)' }}>
+            {t.default_paid_by === 'ambos' ? 'AMBOS' : t.default_paid_by === 'mau' ? 'MAU' : 'JUA'}
           </span>
         </div>
       </div>
@@ -224,7 +224,7 @@ function TmplModal({ tmpl, businesses, categories, onClose, onSaved }: {
   const [bizId,   setBiz]     = useState(tmpl?.business_id ?? businesses[0]?.id ?? '')
   const [catId,   setCat]     = useState(tmpl?.category_id ?? categories[0]?.id ?? '')
   const [type,    setType]    = useState<'gasto'|'ingreso'>(tmpl?.type ?? 'gasto')
-  const [paidBy,  setPaid]    = useState<'mau'|'juani'>(tmpl?.default_paid_by ?? 'mau')
+  const [paidBy,  setPaid]    = useState<'mau'|'juani'|'ambos'>(tmpl?.default_paid_by ?? 'mau')
   const [desc,    setDesc]    = useState(tmpl?.description ?? '')
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
@@ -288,17 +288,17 @@ function TmplModal({ tmpl, businesses, categories, onClose, onSaved }: {
             </div>
           </div>
           <div>
-            <div className="lbl mb-1.5">PAGADO POR</div>
-            <div className="grid grid-cols-2 gap-1">
-              {(['mau','juani'] as const).map(p => (
+            <div className="lbl mb-1.5">{type === 'ingreso' ? 'COBRADO POR' : 'PAGADO POR'}</div>
+            <div className="grid grid-cols-3 gap-1">
+              {(['mau','juani','ambos'] as const).map(p => (
                 <button key={p} onClick={() => setPaid(p)}
                   className="py-2 text-xs font-mono rounded-sm border transition-all"
                   style={{
-                    background: paidBy === p ? (p === 'mau' ? 'rgba(0,255,136,0.08)' : 'rgba(0,229,255,0.08)') : 'var(--s2)',
-                    borderColor: paidBy === p ? (p === 'mau' ? 'var(--mau)' : 'var(--juani)') : 'var(--border)',
-                    color: paidBy === p ? (p === 'mau' ? 'var(--mau)' : 'var(--juani)') : 'var(--text3)',
+                    background: paidBy === p ? (p === 'ambos' ? 'rgba(167,139,250,0.08)' : p === 'mau' ? 'rgba(0,255,136,0.08)' : 'rgba(0,229,255,0.08)') : 'var(--s2)',
+                    borderColor: paidBy === p ? (p === 'ambos' ? '#a78bfa' : p === 'mau' ? 'var(--mau)' : 'var(--juani)') : 'var(--border)',
+                    color: paidBy === p ? (p === 'ambos' ? '#a78bfa' : p === 'mau' ? 'var(--mau)' : 'var(--juani)') : 'var(--text3)',
                   }}>
-                  {p === 'mau' ? 'MAU' : 'JUA'}
+                  {p === 'ambos' ? 'AMBOS' : p === 'mau' ? 'MAU' : 'JUA'}
                 </button>
               ))}
             </div>
@@ -400,24 +400,39 @@ function BulkModal({ templates, onClose, onSaved }: {
     setSaving(true)
     let count = 0
     for (const t of toLoad) {
-      await fetch('/api/movements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date:            `${year}-${month}-01`,
-          amount:          parseFloat(amounts[t.id]),
-          currency:        'ARS',
-          exchange_rate:   1,
-          type:            t.type,
-          business_id:     t.business_id,
-          category_id:     t.category_id,
-          template_id:     t.id,
-          paid_by:         paidByOverride[t.id] ?? t.default_paid_by,
-          description:     t.description ?? t.name,
-          affects_balance: true,
-          split_override:  false,
-        }),
-      })
+      const amount = parseFloat(amounts[t.id])
+      const selectedPaidBy = paidByOverride[t.id] ?? t.default_paid_by
+      const base = {
+        date:            `${year}-${month}-01`,
+        currency:        'ARS',
+        exchange_rate:   1,
+        type:            t.type,
+        business_id:     t.business_id,
+        category_id:     t.category_id,
+        template_id:     t.id,
+        description:     t.description ?? t.name,
+      }
+
+      if (selectedPaidBy === 'ambos') {
+        await Promise.all([
+          fetch('/api/movements', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'mau', affects_balance: false, split_override: true, pct_mau: 100, pct_juani: 0 }),
+          }),
+          fetch('/api/movements', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'juani', affects_balance: false, split_override: true, pct_mau: 0, pct_juani: 100 }),
+          }),
+        ])
+      } else {
+        await fetch('/api/movements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...base, amount, paid_by: selectedPaidBy, affects_balance: true, split_override: false }),
+        })
+      }
       count++
       setDone(count)
     }
@@ -510,12 +525,12 @@ function BulkModal({ templates, onClose, onSaved }: {
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="lbl" style={{ color: biz?.color ?? 'var(--text3)' }}>{biz?.name ?? '—'}</span>
                   <span className="lbl">·</span>
-                  {/* Toggle MAU / JUA */}
-                  {(['mau','juani'] as const).map(p => {
+                  {/* Toggle MAU / JUA / AMBOS */}
+                  {(['mau','juani','ambos'] as const).map(p => {
                     const current = paidByOverride[t.id] ?? t.default_paid_by
                     const active  = current === p
-                    const col     = p === 'mau' ? 'var(--mau)' : 'var(--juani)'
-                    const rgb     = p === 'mau' ? '0,255,136' : '0,229,255'
+                    const col     = p === 'ambos' ? '#a78bfa' : p === 'mau' ? 'var(--mau)' : 'var(--juani)'
+                    const rgb     = p === 'ambos' ? '167,139,250' : p === 'mau' ? '0,255,136' : '0,229,255'
                     return (
                       <button key={p} disabled={isSkipped}
                         onClick={() => setPaidBy(prev => ({ ...prev, [t.id]: p }))}
@@ -525,7 +540,7 @@ function BulkModal({ templates, onClose, onSaved }: {
                           color:      active ? col : 'var(--text3)',
                           border:     `1px solid ${active ? col : 'var(--border)'}`,
                         }}>
-                        {p === 'mau' ? 'MAU' : 'JUA'}
+                        {p === 'ambos' ? 'AMBOS' : p === 'mau' ? 'MAU' : 'JUA'}
                       </button>
                     )
                   })}

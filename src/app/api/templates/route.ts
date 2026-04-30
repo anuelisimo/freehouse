@@ -7,7 +7,7 @@ const TemplateSchema = z.object({
   business_id:      z.string().uuid(),
   category_id:      z.string().uuid(),
   type:             z.enum(['ingreso', 'gasto']),
-  default_paid_by:  z.enum(['mau', 'juani']),
+  default_paid_by:  z.enum(['mau', 'juani', 'ambos']),
   description:      z.string().max(300).optional().nullable(),
   is_favorite:      z.boolean().default(false),
 })

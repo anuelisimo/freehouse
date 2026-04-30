@@ -7,7 +7,7 @@ const UpdateSchema = z.object({
   business_id:     z.string().uuid().optional(),
   category_id:     z.string().uuid().optional(),
   type:            z.enum(['ingreso', 'gasto']).optional(),
-  default_paid_by: z.enum(['mau', 'juani']).optional(),
+  default_paid_by: z.enum(['mau', 'juani', 'ambos']).optional(),
   description:     z.string().max(300).optional().nullable(),
   is_favorite:     z.boolean().optional(),
 })

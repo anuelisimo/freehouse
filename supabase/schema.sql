@@ -72,7 +72,8 @@ INSERT INTO public.categories (name) VALUES
   ('ingresos'),
   ('sueldos'),
   ('impuestos'),
-  ('otros')
+  ('otros'),
+  ('honorarios')
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================
@@ -143,7 +144,7 @@ CREATE TABLE IF NOT EXISTS public.templates (
   business_id     UUID NOT NULL REFERENCES public.businesses(id) ON DELETE CASCADE,
   category_id     UUID NOT NULL REFERENCES public.categories(id) ON DELETE RESTRICT,
   type            TEXT NOT NULL CHECK (type IN ('ingreso', 'gasto')),
-  default_paid_by TEXT NOT NULL CHECK (default_paid_by IN ('mau', 'juani')),
+  default_paid_by TEXT NOT NULL CHECK (default_paid_by IN ('mau', 'juani', 'ambos')),
   description     TEXT,
   is_favorite     BOOLEAN NOT NULL DEFAULT FALSE,
   created_by      UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -157,6 +158,8 @@ DECLARE
   biz_work UUID := (SELECT id FROM public.businesses WHERE name = 'FREEwork');
   cat_serv UUID := (SELECT id FROM public.categories WHERE name = 'servicios');
   cat_memb UUID := (SELECT id FROM public.categories WHERE name = 'membresias');
+  biz_project UUID := (SELECT id FROM public.businesses WHERE name = 'FREEproject');
+  cat_honorarios UUID := (SELECT id FROM public.categories WHERE name = 'honorarios');
 BEGIN
   IF biz_work IS NOT NULL THEN
     INSERT INTO public.templates (name, business_id, category_id, type, default_paid_by, description, is_favorite)
@@ -166,6 +169,15 @@ BEGIN
       ('Gas',                  biz_work, cat_serv, 'gasto',   'juani', 'Pago mensual Metrogas',  TRUE),
       ('Expensas',             biz_work, cat_serv, 'gasto',   'juani', 'Expensas del edificio',  FALSE),
       ('Membresía coworking',  biz_work, cat_memb, 'ingreso', 'juani', 'Pago mensual de socios', TRUE);
+  END IF;
+
+  IF biz_project IS NOT NULL AND cat_honorarios IS NOT NULL THEN
+    INSERT INTO public.templates (name, business_id, category_id, type, default_paid_by, description, is_favorite)
+    VALUES
+      ('Honorarios Proyecto',                 biz_project, cat_honorarios, 'ingreso', 'ambos', 'Honorarios Proyecto',                 TRUE),
+      ('Honorarios Dirección de Obra',       biz_project, cat_honorarios, 'ingreso', 'ambos', 'Honorarios Dirección de Obra',       TRUE),
+      ('Honorarios Administración de Obra',  biz_project, cat_honorarios, 'ingreso', 'ambos', 'Honorarios Administración de Obra',  TRUE),
+      ('Honorarios Black',                   biz_project, cat_honorarios, 'ingreso', 'ambos', 'Honorarios Black',                   TRUE);
   END IF;
 END $$;
 
