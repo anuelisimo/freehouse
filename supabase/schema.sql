@@ -205,7 +205,18 @@ CREATE TABLE IF NOT EXISTS public.movements (
   amount          NUMERIC(14,2)  NOT NULL CHECK (amount > 0),
   currency        TEXT           NOT NULL DEFAULT 'ARS' CHECK (currency IN ('ARS', 'USD', 'EUR')),
   exchange_rate   NUMERIC(14,4)  NOT NULL DEFAULT 1 CHECK (exchange_rate > 0),
+  -- Cotización ARS/USD usada para poder expresar cualquier movimiento en USD.
+  -- En movimientos ARS: amount_usd = amount / usd_exchange_rate.
+  -- En movimientos USD: amount_usd = amount.
+  usd_exchange_rate NUMERIC(14,4) CHECK (usd_exchange_rate IS NULL OR usd_exchange_rate > 0),
   amount_ars      NUMERIC(14,2)  GENERATED ALWAYS AS (amount * exchange_rate) STORED,
+  amount_usd      NUMERIC(14,2)  GENERATED ALWAYS AS (
+    CASE
+      WHEN currency = 'USD' THEN amount
+      WHEN usd_exchange_rate IS NOT NULL AND usd_exchange_rate > 0 THEN amount / usd_exchange_rate
+      ELSE NULL
+    END
+  ) STORED,
 
   type            TEXT           NOT NULL CHECK (type IN ('ingreso', 'gasto')),
 
@@ -282,6 +293,8 @@ CREATE INDEX IF NOT EXISTS idx_movements_business    ON public.movements(busines
 CREATE INDEX IF NOT EXISTS idx_movements_category    ON public.movements(category_id);
 CREATE INDEX IF NOT EXISTS idx_movements_linked_group_id ON public.movements(linked_group_id) WHERE linked_group_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_movements_paid_by     ON public.movements(paid_by);
+CREATE INDEX IF NOT EXISTS idx_movements_amount_usd  ON public.movements(amount_usd);
+CREATE INDEX IF NOT EXISTS idx_movements_usd_exchange_rate ON public.movements(usd_exchange_rate);
 -- Índice parcial: solo movimientos que afectan balance (los más consultados)
 CREATE INDEX IF NOT EXISTS idx_movements_billable    ON public.movements(date DESC, business_id) WHERE affects_balance = TRUE;
 -- Full-text search en descripción

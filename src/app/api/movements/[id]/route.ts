@@ -8,6 +8,7 @@ const UpdateSchema = z.object({
   amount:          z.number().positive().optional(),
   currency:        z.enum(['ARS', 'USD', 'EUR']).optional(),
   exchange_rate:   z.number().positive().optional(),
+  usd_exchange_rate: z.number().positive().optional().nullable(),
   type:            z.enum(['ingreso', 'gasto', 'liquidacion']).optional(),
   business_id:     z.string().uuid().optional(),
   category_id:     z.string().uuid().optional(),

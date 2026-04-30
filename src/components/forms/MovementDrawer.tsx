@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import type { Template } from '@/types'
 import { useCatalog } from '@/hooks/useCatalog'
 import { resolveRule } from '@/lib/balance'
-import { todayISO, fmtARS } from '@/lib/fmt'
+import { todayISO, fmtARS, fmtUSD } from '@/lib/fmt'
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; editId?: string | null; prefillTemplateId?: string | null }
 type MovType = 'gasto' | 'ingreso' | 'liquidacion'
@@ -40,6 +40,9 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   const [templates, setTmpl]  = useState<Template[]>([])
   const [query, setQuery]     = useState('')
   const [showSugg, setShowSugg] = useState(false)
+  const [usdRate, setUsdRate] = useState<number>(exchangeRates['USD'] ?? 0)
+  const [rateLoading, setRateLoading] = useState(false)
+  const [rateError, setRateError] = useState<string | null>(null)
   const amtRef = useRef<HTMLInputElement>(null)
 
   const isAmbos = form.paid_by === 'ambos'
@@ -65,6 +68,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
           pct_mau: Number(m.pct_mau), pct_juani: Number(m.pct_juani),
           payment_method: m.payment_method ?? 'efectivo',
         })
+        setUsdRate(Number(m.usd_exchange_rate ?? (m.currency === 'USD' ? m.exchange_rate : exchangeRates['USD'] ?? 0)))
         const tmplName = templates.find(t => t.id === m.template_id)?.name
         setQuery(tmplName ?? m.description ?? '')
       })
@@ -88,6 +92,30 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
       }
     }
   }, [open, prefillTemplateId, templates])
+
+  useEffect(() => {
+    if (!open || !form.date) return
+    let cancelled = false
+    async function loadUsdRate() {
+      setRateLoading(true)
+      setRateError(null)
+      try {
+        const res = await fetch(`/api/exchange-rates?currency=USD&date=${form.date}`)
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'No se pudo obtener el dólar')
+        if (!cancelled) setUsdRate(Number(json.data?.rate ?? 0))
+      } catch (e: any) {
+        if (!cancelled) {
+          setRateError(e.message ?? 'No se pudo obtener el dólar')
+          if (!usdRate && exchangeRates['USD']) setUsdRate(exchangeRates['USD'])
+        }
+      } finally {
+        if (!cancelled) setRateLoading(false)
+      }
+    }
+    loadUsdRate()
+    return () => { cancelled = true }
+  }, [open, form.date])
 
   useEffect(() => {
     if (!form.split_override && form.business_id && form.category_id && rules.length) {
@@ -138,8 +166,10 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
   }
 
   const amount   = parseFloat(form.amount) || 0
-  const rate     = form.currency === 'USD' ? (exchangeRates['USD'] ?? 1) : 1
-  const amtARS   = amount * rate
+  const rate     = form.currency === 'USD' ? (usdRate || exchangeRates['USD'] || 1) : 1
+  const usdRateForCalc = usdRate || exchangeRates['USD'] || 1
+  const amtARS   = form.currency === 'USD' ? amount * usdRateForCalc : amount
+  const amtUSD   = form.currency === 'USD' ? amount : amount / usdRateForCalc
   // Para AMBOS, cada uno recibe la mitad
   const mauAmt   = isAmbos ? amtARS / 2 : amtARS * form.pct_mau   / 100
   const juaniAmt = isAmbos ? amtARS / 2 : amtARS * form.pct_juani / 100
@@ -175,7 +205,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
         const half = amount / 2
         const linkedGroupId = crypto.randomUUID()
         const base = {
-          currency: form.currency, exchange_rate: rate,
+          currency: form.currency, exchange_rate: rate, usd_exchange_rate: usdRateForCalc,
           type: form.type, business_id: form.business_id,
           category_id: form.category_id, date: form.date,
           description: form.description || query || undefined,
@@ -201,7 +231,7 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
         const res = await fetch(editId ? `/api/movements/${editId}` : '/api/movements', {
           method:  editId ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ...form, amount, exchange_rate: rate }),
+          body:    JSON.stringify({ ...form, amount, exchange_rate: rate, usd_exchange_rate: usdRateForCalc }),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error?.message ?? json.error ?? 'Error')
@@ -360,8 +390,14 @@ export default function MovementDrawer({ open, onClose, onSaved, editId, prefill
                       style={{ ...fieldStyle(fieldErrors.amount), fontFamily: 'monospace' }}
                       onChange={e => set('amount', e.target.value)} inputMode="decimal" />
                   </div>
-                  {form.currency === 'USD' && amount > 0 && (
-                    <div className="lbl mt-1.5">≈ {fmtARS(amtARS)} · TC {fmtARS(exchangeRates['USD'] ?? 0)}</div>
+                  {amount > 0 && (
+                    <div className="lbl mt-1.5" style={{ color: rateError ? 'var(--warn)' : 'var(--text3)' }}>
+                      {form.currency === 'USD'
+                        ? `≈ ${fmtARS(amtARS)} · TC ${fmtARS(usdRateForCalc)}`
+                        : `≈ ${fmtUSD(amtUSD)} · TC ${fmtARS(usdRateForCalc)}`}
+                      {rateLoading ? ' · actualizando…' : ''}
+                      {rateError ? ` · ${rateError}` : ''}
+                    </div>
                   )}
                   {/* Preview compartido */}
                   {isAmbos && amount > 0 && (

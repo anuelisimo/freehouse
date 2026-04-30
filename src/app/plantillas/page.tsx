@@ -399,13 +399,22 @@ function BulkModal({ templates, onClose, onSaved }: {
     if (toLoad.length === 0) { alert('Ingresá al menos un monto'); return }
     setSaving(true)
     let count = 0
+    let usdRate = 1
+    const batchDate = `${year}-${month}-01`
+    try {
+      const rateRes = await fetch(`/api/exchange-rates?currency=USD&date=${batchDate}`)
+      const rateJson = await rateRes.json()
+      usdRate = Number(rateJson.data?.rate ?? 1)
+    } catch { /* fallback seguro */ }
+
     for (const t of toLoad) {
       const amount = parseFloat(amounts[t.id])
       const selectedPaidBy = paidByOverride[t.id] ?? t.default_paid_by
       const base = {
-        date:            `${year}-${month}-01`,
+        date:            batchDate,
         currency:        'ARS',
         exchange_rate:   1,
+        usd_exchange_rate: usdRate,
         type:            t.type,
         business_id:     t.business_id,
         category_id:     t.category_id,
@@ -414,16 +423,17 @@ function BulkModal({ templates, onClose, onSaved }: {
       }
 
       if (selectedPaidBy === 'ambos') {
+        const linkedGroupId = crypto.randomUUID()
         await Promise.all([
           fetch('/api/movements', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'mau', affects_balance: false, split_override: true, pct_mau: 100, pct_juani: 0 }),
+            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'mau', affects_balance: false, split_override: true, pct_mau: 100, pct_juani: 0, linked_group_id: linkedGroupId }),
           }),
           fetch('/api/movements', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'juani', affects_balance: false, split_override: true, pct_mau: 0, pct_juani: 100 }),
+            body: JSON.stringify({ ...base, amount: amount / 2, paid_by: 'juani', affects_balance: false, split_override: true, pct_mau: 0, pct_juani: 100, linked_group_id: linkedGroupId }),
           }),
         ])
       } else {

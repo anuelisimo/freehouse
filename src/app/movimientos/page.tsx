@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { Movement, Business } from '@/types'
-import { fmtARS, fmtDate, fmtPeriod } from '@/lib/fmt'
+import { fmtARS, fmtUSD, fmtDate, fmtPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
 interface Filters {
@@ -26,6 +26,7 @@ export default function MovimientosPage() {
   const [editId,     setEditId]  = useState<string | null>(null)
   const [deleting,   setDel]     = useState<string | null>(null)
   const [exporting,  setExport]  = useState(false)
+  const [backfilling, setBackfill] = useState(false)
 
   useEffect(() => {
     fetch('/api/catalog').then(r => r.json()).then(j => setBiz(j.data?.businesses ?? []))
@@ -77,6 +78,22 @@ export default function MovimientosPage() {
     load(filters)
   }
 
+  async function handleBackfillUsd() {
+    if (!confirm('Esto estimará el valor USD de movimientos viejos en ARS usando la cotización blue histórica por fecha. ¿Continuar?')) return
+    setBackfill(true)
+    try {
+      const res = await fetch('/api/exchange-rates/backfill', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 1000 }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Error estimando USD')
+      alert(`Listo: ${json.data?.updated ?? 0} movimientos actualizados.`)
+      load(filters)
+    } catch (e: any) { alert(e.message ?? 'Error estimando USD') }
+    finally { setBackfill(false) }
+  }
+
   async function handleExport() {
     setExport(true)
     try {
@@ -93,7 +110,7 @@ export default function MovimientosPage() {
 
       if (data.length === 0) { alert('No hay movimientos para exportar'); setExport(false); return }
 
-      const headers = ['Fecha','Tipo','Negocio','Categoría','Descripción','Moneda','Monto','Monto ARS','Tipo de cambio','Pagado por','Registrado por','% Mau','% Juani','Corresponde Mau (ARS)','Corresponde Juani (ARS)','Afecta balance']
+      const headers = ['Fecha','Tipo','Negocio','Categoría','Descripción','Moneda','Monto','Monto ARS','Monto USD','TC USD usado','Tipo de cambio moneda','Pagado por','Registrado por','% Mau','% Juani','Corresponde Mau (ARS)','Corresponde Juani (ARS)','Afecta balance']
       const rows = data.map(m => {
         const amtARS   = Number(m.amount_ars)
         const mauAmt   = amtARS * (Number(m.pct_mau)   / 100)
@@ -106,6 +123,8 @@ export default function MovimientosPage() {
           m.currency,
           String(m.amount).replace('.', ','),
           String(amtARS.toFixed(2)).replace('.', ','),
+          String(Number(m.amount_usd ?? 0).toFixed(2)).replace('.', ','),
+          String(m.usd_exchange_rate ?? '').replace('.', ','),
           String(m.exchange_rate).replace('.', ','),
           m.paid_by === 'mau' ? 'Mau' : 'Juani',
           (m.profiles as any)?.name ?? '',
@@ -146,6 +165,11 @@ export default function MovimientosPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={handleBackfillUsd} disabled={backfilling}
+              className="btn-ghost text-xs px-3 py-2"
+              style={{ opacity: backfilling ? 0.6 : 1 }} title="Estimar USD histórico">
+              {backfilling ? 'USD…' : 'ESTIMAR USD'}
+            </button>
             <button onClick={handleExport} disabled={exporting}
               className="btn-ghost text-xs px-3 py-2 flex items-center gap-1.5"
               style={{ opacity: exporting ? 0.6 : 1 }} title="Exportar a Excel">
@@ -308,6 +332,9 @@ function MovRow({ m, last, onEdit, onDelete, deleting }: {
           style={isLiquid ? { color: 'var(--cyan)' } : {}}>
           {isLiquid ? '⇄ ' : isIncome ? '+' : '-'}{fmtARS(m.amount_ars)}
         </div>
+        {m.amount_usd != null && (
+          <div className="lbl" style={{ color: 'var(--text3)' }}>{fmtUSD(Number(m.amount_usd), true)}</div>
+        )}
         {!m.affects_balance && <div className="lbl" style={{ color: 'var(--text3)' }}>no bal.</div>}
       </div>
       <div className="flex gap-1 flex-shrink-0">

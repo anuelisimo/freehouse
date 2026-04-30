@@ -23,3 +23,10 @@ export function todayISO(): string {
 export function currentPeriod(): string {
   return new Date().toISOString().slice(0, 7)
 }
+
+export function fmtUSD(n: number, compact = false): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: compact ? 0 : 2, maximumFractionDigits: compact ? 0 : 2,
+  }).format(n)
+}

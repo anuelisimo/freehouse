@@ -58,7 +58,9 @@ export interface Movement {
   amount: number
   currency: Currency
   exchange_rate: number
+  usd_exchange_rate: number | null
   amount_ars: number
+  amount_usd: number | null
   type: MovementType
   business_id: string
   category_id: string

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { PeriodBalance, BusinessBalance, Movement } from '@/types'
-import { fmtARS, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
+import { fmtARS, fmtUSD, fmtDate, fmtPeriod, currentPeriod } from '@/lib/fmt'
 import MovementDrawer from '@/components/forms/MovementDrawer'
 
 interface DashData {
@@ -273,6 +273,7 @@ function TradeRow({ m }: { m: Movement }) {
       </div>
       <div className={`num text-xs text-right font-medium ${isIncome ? 'num-pos' : 'num-neg'}`}>
         {isIncome ? '+' : '-'}{fmtARS(m.amount_ars, true)}
+        {m.amount_usd != null && <div className="lbl" style={{ color: 'var(--text3)' }}>{fmtUSD(Number(m.amount_usd), true)}</div>}
       </div>
     </div>
   )
